@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from app.core.audit import record
-from app.core.errors import AuthError, ConflictError, NotFoundError, ValidationError_
+from app.core.errors import AuthError, ConflictError, NotFoundError
 from app.core.events.publisher import emit
 from app.core.security import (
     create_access_token,
@@ -22,9 +22,11 @@ from app.modules.identity.models import (
     PasswordResetToken,
     Permission,
     Role,
-    Session as SessionModel,
     User,
     UserRole,
+)
+from app.modules.identity.models import (
+    Session as SessionModel,
 )
 from app.modules.identity.schemas import (
     AcceptInviteRequest,
