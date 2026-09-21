@@ -1,6 +1,6 @@
-import structlog
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from sqlalchemy import delete
 
 from app.core.celery_app import celery_app

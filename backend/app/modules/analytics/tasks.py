@@ -1,5 +1,6 @@
-import structlog
 from datetime import date, timedelta
+
+import structlog
 
 from app.core.celery_app import celery_app
 from app.core.db import SessionLocal
