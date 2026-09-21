@@ -49,7 +49,7 @@ class PermissionError_(AppError):
 
 
 class ValidationError_(AppError):
-    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    status_code = 422
     code = "validation_error"
     message = "Invalid input"
 

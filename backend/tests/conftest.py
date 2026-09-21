@@ -1,5 +1,8 @@
 import os
 import uuid
+import warnings
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 

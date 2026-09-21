@@ -16,6 +16,7 @@ from app.modules.dispatch.router import router as dispatch_router
 from app.modules.drivers.router import router as drivers_router
 from app.modules.identity.router import router as auth_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import customers_router
 from app.modules.orders.router import router as orders_router
 from app.modules.routing.router import router as routing_router
@@ -64,6 +65,7 @@ app.include_router(deliveries_router, prefix=settings.API_V1_PREFIX)
 app.include_router(drivers_router, prefix=settings.API_V1_PREFIX)
 app.include_router(dispatch_router, prefix=settings.API_V1_PREFIX)
 app.include_router(routing_router, prefix=settings.API_V1_PREFIX)
+app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tracking_router)
 
 

@@ -4,6 +4,7 @@ from app.modules.dispatch import models as dispatch_models  # noqa: F401
 from app.modules.drivers import models as drivers_models  # noqa: F401
 from app.modules.identity import models as identity_models  # noqa: F401
 from app.modules.inventory import models as inventory_models  # noqa: F401
+from app.modules.notifications import models as notifications_models  # noqa: F401
 from app.modules.orders import models as orders_models  # noqa: F401
 from app.modules.routing import models as routing_models  # noqa: F401
 from app.modules.warehouse import models as warehouse_models  # noqa: F401

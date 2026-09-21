@@ -43,6 +43,7 @@ jobs:
       SECRET_KEY: ci-secret
       ENV: ci
       RATE_LIMIT_ENABLED: "false"
+      PYTHONWARNINGS: "ignore::DeprecationWarning"
 
     defaults:
       run:
