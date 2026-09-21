@@ -1,3 +1,7 @@
+> ⚠️ **Proprietary — All Rights Reserved.**
+> Public for portfolio review only. No part may be copied, used, modified,
+> or redistributed without written permission.
+
 # SaaS Platform
 
 Multi-tenant B2B Logistics & Warehouse Management SaaS.
@@ -89,4 +93,5 @@ See `docs/03-roadmap.md`.
 
 ## Status
 
-Early development. Domain modeling in progress.
+In active development. Foundation + core modules (identity, warehouse,
+inventory, orders) implemented and tested. CI green.
