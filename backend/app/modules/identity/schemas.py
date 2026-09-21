@@ -46,6 +46,16 @@ class UserWithRolesOut(UserOut):
     roles: list[str] = []
 
 
+class UserUpdate(BaseModel):
+    full_name: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=30)
+    is_active: bool | None = None
+
+
+class UserRoleChange(BaseModel):
+    role_name: str = Field(min_length=2, max_length=50)
+
+
 # ---------- Auth ----------
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -84,3 +94,31 @@ class AcceptInviteRequest(BaseModel):
     token: str
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(default="", max_length=200)
+
+
+# ---------- Roles / Permissions ----------
+class RoleOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    is_system: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PermissionOut(BaseModel):
+    id: int
+    code: str
+    description: str
+
+    model_config = {"from_attributes": True}
+
+
+# ---------- Password reset ----------
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+    organization_slug: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)

@@ -250,3 +250,13 @@ def list_positions(
             .limit(limit)
         )
     )
+
+def get_my_driver(uow: UnitOfWork, org_id: uuid.UUID, user_id: uuid.UUID) -> Driver:
+    d = uow.session.scalar(
+        select(Driver).where(
+            Driver.organization_id == org_id, Driver.user_id == user_id
+        )
+    )
+    if not d:
+        raise NotFoundError("no driver profile linked to your account")
+    return d

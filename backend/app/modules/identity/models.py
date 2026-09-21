@@ -25,7 +25,8 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("organization_id", "email", name="uq_users_org_email"),)
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
+        index=True, nullable=False,
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -62,7 +63,9 @@ class Permission(Base):
     code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     description: Mapped[str] = mapped_column(String(255), default="", nullable=False)
 
-    roles: Mapped[list[Role]] = relationship(secondary="role_permissions", back_populates="permissions")
+    roles: Mapped[list[Role]] = relationship(
+        secondary="role_permissions", back_populates="permissions"
+    )
 
 
 class RolePermission(Base):
@@ -91,7 +94,8 @@ class Session(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "sessions"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
     )
     refresh_token_hash: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -104,7 +108,8 @@ class Invitation(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "invitations"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"),
+        index=True, nullable=False,
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     role_id: Mapped[uuid.UUID] = mapped_column(
@@ -116,3 +121,15 @@ class Invitation(UUIDPKMixin, TimestampMixin, Base):
     invited_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
+
+
+class PasswordResetToken(UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = "password_reset_tokens"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        index=True, nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

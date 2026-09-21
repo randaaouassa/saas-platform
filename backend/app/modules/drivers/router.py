@@ -30,7 +30,9 @@ def create_driver(
     user: User = Depends(MANAGER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> DriverOut:
-    return DriverOut.model_validate(service.create_driver(uow, user.organization_id, user.id, payload))
+    return DriverOut.model_validate(
+        service.create_driver(uow, user.organization_id, user.id, payload)
+    )
 
 
 @router.get("", response_model=list[DriverOut])
@@ -39,7 +41,20 @@ def list_drivers(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[DriverOut]:
-    return [DriverOut.model_validate(d) for d in service.list_drivers(uow, user.organization_id, status_filter)]
+    return [
+        DriverOut.model_validate(d)
+        for d in service.list_drivers(uow, user.organization_id, status_filter)
+    ]
+
+
+@router.get("/me", response_model=DriverOut)
+def my_driver(
+    user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
+) -> DriverOut:
+    return DriverOut.model_validate(
+        service.get_my_driver(uow, user.organization_id, user.id)
+    )
 
 
 @router.get("/{driver_id}", response_model=DriverOut)
@@ -48,7 +63,9 @@ def get_driver(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> DriverOut:
-    return DriverOut.model_validate(service.get_driver(uow, user.organization_id, driver_id))
+    return DriverOut.model_validate(
+        service.get_driver(uow, user.organization_id, driver_id)
+    )
 
 
 @router.patch("/{driver_id}", response_model=DriverOut)
@@ -70,7 +87,9 @@ def create_vehicle(
     user: User = Depends(MANAGER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> VehicleOut:
-    return VehicleOut.model_validate(service.create_vehicle(uow, user.organization_id, user.id, payload))
+    return VehicleOut.model_validate(
+        service.create_vehicle(uow, user.organization_id, user.id, payload)
+    )
 
 
 @router.get("/vehicles/list", response_model=list[VehicleOut])
@@ -78,7 +97,10 @@ def list_vehicles(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[VehicleOut]:
-    return [VehicleOut.model_validate(v) for v in service.list_vehicles(uow, user.organization_id)]
+    return [
+        VehicleOut.model_validate(v)
+        for v in service.list_vehicles(uow, user.organization_id)
+    ]
 
 
 # ---------- Shift ----------
@@ -88,7 +110,9 @@ def start_shift(
     user: User = Depends(MANAGER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> ShiftOut:
-    return ShiftOut.model_validate(service.start_shift(uow, user.organization_id, user.id, payload))
+    return ShiftOut.model_validate(
+        service.start_shift(uow, user.organization_id, user.id, payload)
+    )
 
 
 @router.post("/shifts/{shift_id}/end", response_model=ShiftOut)
@@ -97,7 +121,9 @@ def end_shift(
     user: User = Depends(MANAGER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> ShiftOut:
-    return ShiftOut.model_validate(service.end_shift(uow, user.organization_id, user.id, shift_id))
+    return ShiftOut.model_validate(
+        service.end_shift(uow, user.organization_id, user.id, shift_id)
+    )
 
 
 @router.get("/shifts/list", response_model=list[ShiftOut])
@@ -106,11 +132,16 @@ def list_shifts(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[ShiftOut]:
-    return [ShiftOut.model_validate(s) for s in service.list_shifts(uow, user.organization_id, driver_id)]
+    return [
+        ShiftOut.model_validate(s)
+        for s in service.list_shifts(uow, user.organization_id, driver_id)
+    ]
 
 
 # ---------- Position ----------
-@router.post("/{driver_id}/positions", response_model=PositionOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{driver_id}/positions", response_model=PositionOut, status_code=status.HTTP_201_CREATED
+)
 def record_position(
     driver_id: uuid.UUID,
     payload: PositionCreate,

@@ -1,8 +1,5 @@
 import os
 import uuid
-import warnings
-
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
@@ -48,9 +45,33 @@ def engine(_create_test_db):
     eng.dispose()
 
 
+@pytest.fixture(autouse=True)
+def _patch_sessionlocal(engine):
+    TestSession = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
+    import app.core.db as core_db
+    import app.core.events.dispatcher as disp_mod
+    import app.core.uow as uow_mod
+
+    orig_db = core_db.SessionLocal
+    orig_uow = uow_mod.SessionLocal
+    orig_disp = disp_mod.SessionLocal
+
+    core_db.SessionLocal = TestSession
+    uow_mod.SessionLocal = TestSession
+    disp_mod.SessionLocal = TestSession
+    yield
+    core_db.SessionLocal = orig_db
+    uow_mod.SessionLocal = orig_uow
+    disp_mod.SessionLocal = orig_disp
+
+
 @pytest.fixture
 def db(engine):
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    SessionLocal = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
     session: Session = SessionLocal()
     from app.core.db import Base
     for table in reversed(Base.metadata.sorted_tables):

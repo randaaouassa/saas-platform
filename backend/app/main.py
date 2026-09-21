@@ -3,11 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core import (
-    celery_beat,  # noqa: F401
-    celery_dlq,  # noqa: F401
-    cleanup_tasks,  # noqa: F401
-)
+from app.core import celery_beat  # noqa: F401
+from app.core import celery_dlq  # noqa: F401
+from app.core import cleanup_tasks  # noqa: F401
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.idempotency import IdempotencyMiddleware
@@ -20,7 +18,9 @@ from app.modules.analytics.router import router as analytics_router
 from app.modules.deliveries.router import router as deliveries_router
 from app.modules.dispatch.router import router as dispatch_router
 from app.modules.drivers.router import router as drivers_router
+from app.modules.identity.router import roles_router
 from app.modules.identity.router import router as auth_router
+from app.modules.identity.router import users_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import customers_router
@@ -64,6 +64,8 @@ app.add_middleware(MetricsMiddleware)
 register_exception_handlers(app)
 
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
+app.include_router(users_router, prefix=settings.API_V1_PREFIX)
+app.include_router(roles_router, prefix=settings.API_V1_PREFIX)
 app.include_router(warehouse_router, prefix=settings.API_V1_PREFIX)
 app.include_router(inventory_router, prefix=settings.API_V1_PREFIX)
 app.include_router(orders_router, prefix=settings.API_V1_PREFIX)
