@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from contextlib import contextmanager
 
 from sqlalchemy.orm import Session
 

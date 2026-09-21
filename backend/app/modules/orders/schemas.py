@@ -46,7 +46,7 @@ class CustomerOut(BaseModel):
 class OrderItemCreate(BaseModel):
     product_id: uuid.UUID
     quantity: Decimal = Field(gt=0)
-    unit_price: Decimal = Field(ge=0, default=Decimal("0"))
+    unit_price: Decimal = Field(ge=0, default=Decimal(0))
 
 
 class OrderItemOut(BaseModel):

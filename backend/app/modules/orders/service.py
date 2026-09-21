@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -7,12 +7,12 @@ from sqlalchemy import select
 from app.core.audit import record
 from app.core.errors import ConflictError, NotFoundError, ValidationError_
 from app.core.uow import UnitOfWork
+from app.modules.inventory.models import StockReservation
+from app.modules.inventory.schemas import ReservationCreate
 from app.modules.inventory.service import (
     release_reservation,
     reserve_stock,
 )
-from app.modules.inventory.schemas import ReservationCreate
-from app.modules.inventory.models import StockReservation
 from app.modules.orders.models import (
     Customer,
     Order,
@@ -42,7 +42,7 @@ ORDER_TRANSITIONS: dict[str, set[str]] = {
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ---------- Customer ----------
@@ -109,7 +109,7 @@ def create_order(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payloa
     db.add(order)
     uow.flush()
 
-    total = Decimal("0")
+    total = Decimal(0)
     for item in payload.items:
         line_total = Decimal(item.quantity) * Decimal(item.unit_price)
         total += line_total

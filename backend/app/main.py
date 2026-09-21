@@ -13,7 +13,8 @@ from app.core.otel import setup_tracing
 from app.core.rate_limit import RateLimitMiddleware
 from app.modules.identity.router import router as auth_router
 from app.modules.inventory.router import router as inventory_router
-from app.modules.orders.router import customers_router, router as orders_router
+from app.modules.orders.router import customers_router
+from app.modules.orders.router import router as orders_router
 from app.modules.warehouse.router import router as warehouse_router
 
 configure_logging()

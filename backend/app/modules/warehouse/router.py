@@ -102,7 +102,10 @@ def list_locations(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[LocationOut]:
-    return [LocationOut.model_validate(l) for l in service.list_locations(uow, user.organization_id, zone_id)]
+    return [
+        LocationOut.model_validate(loc)
+        for loc in service.list_locations(uow, user.organization_id, zone_id)
+    ]
 
 
 # ---------- Tasks ----------

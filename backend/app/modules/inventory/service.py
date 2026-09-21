@@ -231,7 +231,9 @@ def list_stock(uow: UnitOfWork, org_id: uuid.UUID, warehouse_id: uuid.UUID | Non
 
 
 # ---------- Reservation ----------
-def reserve_stock(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: ReservationCreate) -> StockReservation:
+def reserve_stock(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: ReservationCreate
+) -> StockReservation:
     db = uow.session
     get_product(uow, org_id, payload.product_id)
     s = _get_or_create_stock(db, org_id, payload.product_id, payload.warehouse_id, None)

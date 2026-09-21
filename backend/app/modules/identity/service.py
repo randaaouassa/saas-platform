@@ -19,9 +19,11 @@ from app.modules.identity.models import (
     Invitation,
     Organization,
     Role,
-    Session as SessionModel,
     User,
     UserRole,
+)
+from app.modules.identity.models import (
+    Session as SessionModel,
 )
 from app.modules.identity.schemas import (
     AcceptInviteRequest,
@@ -172,7 +174,9 @@ def logout(uow: UnitOfWork, refresh_token: str) -> None:
         uow.commit()
 
 
-def invite_user(uow: UnitOfWork, org_id: uuid.UUID, invited_by: uuid.UUID, payload: InviteRequest) -> tuple[Invitation, str]:
+def invite_user(
+    uow: UnitOfWork, org_id: uuid.UUID, invited_by: uuid.UUID, payload: InviteRequest
+) -> tuple[Invitation, str]:
     db = uow.session
     role = db.scalar(
         select(Role).where(Role.organization_id == org_id, Role.name == payload.role_name)
