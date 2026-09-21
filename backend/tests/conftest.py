@@ -36,9 +36,9 @@ def _create_test_db():
 @pytest.fixture(scope="session")
 def engine(_create_test_db):
     eng = create_engine(TEST_DB_URL, future=True)
-    from app.core.db import Base
-    import app.modules  # noqa: F401
     import app.core.audit  # noqa: F401
+    import app.modules  # noqa: F401
+    from app.core.db import Base
     Base.metadata.create_all(bind=eng)
     yield eng
     Base.metadata.drop_all(bind=eng)
