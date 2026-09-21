@@ -8,12 +8,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+PG_HOST = os.getenv("POSTGRES_HOST", "db")
+PG_PORT = os.getenv("POSTGRES_PORT", "5432")
+PG_USER = os.getenv("POSTGRES_USER", "postgres")
+PG_PASS = os.getenv("POSTGRES_PASSWORD", "postgres")
+
 TEST_DB_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@db:5432/saas_platform_test",
+    f"postgresql+psycopg://{PG_USER}:{PG_PASS}@{PG_HOST}:{PG_PORT}/saas_platform_test",
 )
-
-ADMIN_DB_URL = "postgresql+psycopg://postgres:postgres@db:5432/postgres"
+ADMIN_DB_URL = f"postgresql+psycopg://{PG_USER}:{PG_PASS}@{PG_HOST}:{PG_PORT}/postgres"
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -32,9 +36,9 @@ def _create_test_db():
 @pytest.fixture(scope="session")
 def engine(_create_test_db):
     eng = create_engine(TEST_DB_URL, future=True)
-    import app.core.audit
-    import app.modules  # noqa: F401
     from app.core.db import Base
+    import app.modules  # noqa: F401
+    import app.core.audit  # noqa: F401
     Base.metadata.create_all(bind=eng)
     yield eng
     Base.metadata.drop_all(bind=eng)
