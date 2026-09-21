@@ -11,6 +11,7 @@ from app.core.metrics import metrics_response
 from app.core.middleware import RequestIDMiddleware
 from app.core.otel import setup_tracing
 from app.core.rate_limit import RateLimitMiddleware
+from app.modules.deliveries.router import router as deliveries_router
 from app.modules.identity.router import router as auth_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.orders.router import customers_router
@@ -55,6 +56,7 @@ app.include_router(warehouse_router, prefix=settings.API_V1_PREFIX)
 app.include_router(inventory_router, prefix=settings.API_V1_PREFIX)
 app.include_router(orders_router, prefix=settings.API_V1_PREFIX)
 app.include_router(customers_router, prefix=settings.API_V1_PREFIX)
+app.include_router(deliveries_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health/live", tags=["system"])
