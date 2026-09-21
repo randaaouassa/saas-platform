@@ -1,5 +1,6 @@
 from app.core import audit as audit_models  # noqa: F401
 from app.modules.deliveries import models as deliveries_models  # noqa: F401
+from app.modules.dispatch import models as dispatch_models  # noqa: F401
 from app.modules.drivers import models as drivers_models  # noqa: F401
 from app.modules.identity import models as identity_models  # noqa: F401
 from app.modules.inventory import models as inventory_models  # noqa: F401
