@@ -1,18 +1,16 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
 
 from app.core.audit import record
 from app.core.errors import ConflictError, NotFoundError, ValidationError_
+from app.core.events.publisher import emit
 from app.core.uow import UnitOfWork
 from app.modules.inventory.models import StockReservation
 from app.modules.inventory.schemas import ReservationCreate
-from app.modules.inventory.service import (
-    release_reservation,
-    reserve_stock,
-)
+from app.modules.inventory.service import release_reservation, reserve_stock
 from app.modules.orders.models import (
     Customer,
     Order,
@@ -26,7 +24,6 @@ from app.modules.orders.schemas import (
     OrderStatusUpdate,
 )
 
-# lifecycle: from -> allowed next states
 ORDER_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"confirmed", "cancelled"},
     "confirmed": {"reserved", "cancelled"},
@@ -42,11 +39,12 @@ ORDER_TRANSITIONS: dict[str, set[str]] = {
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
-# ---------- Customer ----------
-def create_customer(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: CustomerCreate) -> Customer:
+def create_customer(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: CustomerCreate
+) -> Customer:
     db = uow.session
     c = Customer(organization_id=org_id, **payload.model_dump())
     db.add(c)
@@ -88,11 +86,14 @@ def update_customer(
     return c
 
 
-# ---------- Order ----------
-def create_order(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: OrderCreate) -> Order:
+def create_order(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: OrderCreate
+) -> Order:
     db = uow.session
 
-    exists = db.scalar(select(Order).where(Order.organization_id == org_id, Order.number == payload.number))
+    exists = db.scalar(
+        select(Order).where(Order.organization_id == org_id, Order.number == payload.number)
+    )
     if exists:
         raise ConflictError("order number already exists")
 
@@ -109,7 +110,7 @@ def create_order(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payloa
     db.add(order)
     uow.flush()
 
-    total = Decimal(0)
+    total = Decimal("0")
     for item in payload.items:
         line_total = Decimal(item.quantity) * Decimal(item.unit_price)
         total += line_total
@@ -125,10 +126,17 @@ def create_order(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payloa
         )
     order.total_amount = total
 
-    db.add(OrderStatusHistory(
-        organization_id=org_id, order_id=order.id, from_status=None, to_status="draft", actor_id=actor_id
-    ))
-
+    db.add(
+        OrderStatusHistory(
+            organization_id=org_id, order_id=order.id,
+            from_status=None, to_status="draft", actor_id=actor_id,
+        )
+    )
+    emit(
+        db, type="order.created", aggregate_type="order", aggregate_id=order.id,
+        organization_id=org_id, actor_id=actor_id,
+        payload={"number": order.number, "total": str(order.total_amount)},
+    )
     record(db, organization_id=org_id, actor_id=actor_id,
            action="order.created", resource="order", resource_id=str(order.id))
     uow.commit()
@@ -153,8 +161,8 @@ def get_order(uow: UnitOfWork, org_id: uuid.UUID, order_id: uuid.UUID) -> Order:
 
 
 def transition_order(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, order_id: uuid.UUID, payload: OrderStatusUpdate,
-    warehouse_id: uuid.UUID | None = None,
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, order_id: uuid.UUID,
+    payload: OrderStatusUpdate, warehouse_id: uuid.UUID | None = None,
 ) -> Order:
     db = uow.session
     order = get_order(uow, org_id, order_id)
@@ -165,7 +173,6 @@ def transition_order(
     if target not in allowed:
         raise ValidationError_(f"invalid transition: {current} -> {target}")
 
-    # side effects
     if target == "reserved":
         if not warehouse_id:
             raise ValidationError_("warehouse_id is required to reserve stock")
@@ -182,7 +189,6 @@ def transition_order(
             )
 
     if target == "cancelled":
-        # release any active reservations for this order
         reservations = list(
             db.scalars(
                 select(StockReservation).where(
@@ -197,7 +203,6 @@ def transition_order(
             release_reservation(uow, org_id, actor_id, r.id, consume=False)
 
     if target == "dispatched":
-        # consume reservations (stock leaves the warehouse)
         reservations = list(
             db.scalars(
                 select(StockReservation).where(
@@ -215,10 +220,17 @@ def transition_order(
     if target == "confirmed" and order.placed_at is None:
         order.placed_at = _now()
 
-    db.add(OrderStatusHistory(
-        organization_id=org_id, order_id=order.id,
-        from_status=current, to_status=target, actor_id=actor_id, reason=payload.reason,
-    ))
+    db.add(
+        OrderStatusHistory(
+            organization_id=org_id, order_id=order.id,
+            from_status=current, to_status=target,
+            actor_id=actor_id, reason=payload.reason,
+        )
+    )
+    emit(
+        db, type=f"order.{target}", aggregate_type="order", aggregate_id=order.id,
+        organization_id=org_id, actor_id=actor_id, payload={"from": current},
+    )
     record(db, organization_id=org_id, actor_id=actor_id,
            action=f"order.{target}", resource="order", resource_id=str(order.id))
     uow.commit()
@@ -226,12 +238,17 @@ def transition_order(
     return order
 
 
-def list_history(uow: UnitOfWork, org_id: uuid.UUID, order_id: uuid.UUID) -> list[OrderStatusHistory]:
+def list_history(
+    uow: UnitOfWork, org_id: uuid.UUID, order_id: uuid.UUID
+) -> list[OrderStatusHistory]:
     get_order(uow, org_id, order_id)
     return list(
         uow.session.scalars(
             select(OrderStatusHistory)
-            .where(OrderStatusHistory.organization_id == org_id, OrderStatusHistory.order_id == order_id)
+            .where(
+                OrderStatusHistory.organization_id == org_id,
+                OrderStatusHistory.order_id == order_id,
+            )
             .order_by(OrderStatusHistory.created_at)
         )
     )

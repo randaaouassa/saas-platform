@@ -23,8 +23,6 @@ services:
       context: ./backend
       target: dev
     env_file: .env
-    environment:
-      PYTHONWARNINGS: "ignore::DeprecationWarning"
     ports: ["8000:8000"]
     volumes:
       - ./backend/app:/app/app
@@ -42,8 +40,6 @@ services:
       context: ./backend
       target: dev
     env_file: .env
-    environment:
-      PYTHONWARNINGS: "ignore::DeprecationWarning"
     volumes:
       - ./backend/app:/app/app
     depends_on:
@@ -56,13 +52,23 @@ services:
       context: ./backend
       target: dev
     env_file: .env
-    environment:
-      PYTHONWARNINGS: "ignore::DeprecationWarning"
     volumes:
       - ./backend/app:/app/app
     depends_on:
       redis: { condition: service_healthy }
     command: celery -A app.core.celery_app beat -l info
+
+  outbox:
+    build:
+      context: ./backend
+      target: dev
+    env_file: .env
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: python -m app.worker.outbox
 
 volumes:
   pgdata:

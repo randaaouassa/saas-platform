@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.core.audit import record
 from app.core.errors import ConflictError, NotFoundError, ValidationError_
+from app.core.events.publisher import emit
 from app.core.uow import UnitOfWork
 from app.modules.deliveries.models import Delivery
 from app.modules.dispatch.models import Assignment, DispatchEvent
@@ -38,11 +39,7 @@ def _get_delivery(uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID) ->
     return d
 
 
-def _candidate_score(
-    distance_km: float | None,
-    active_deliveries: int,
-) -> float:
-    """Higher is better. Simple weighted score in [0, 100]."""
+def _candidate_score(distance_km: float | None, active_deliveries: int) -> float:
     distance_score = 100.0 if distance_km is None else max(0.0, 100.0 - distance_km * 5.0)
     workload_score = max(0.0, 100.0 - active_deliveries * 20.0)
     return 0.7 * distance_score + 0.3 * workload_score
@@ -78,15 +75,6 @@ def rank_candidates(
         if pos and delivery.pickup_lat is not None and delivery.pickup_lng is not None:
             distance_km = _haversine_km(pos.lat, pos.lng, delivery.pickup_lat, delivery.pickup_lng)
 
-        active = db.scalar(
-            select(Assignment)
-            .where(
-                Assignment.organization_id == org_id,
-                Assignment.driver_id == driver.id,
-                Assignment.status.in_(["offered", "accepted"]),
-            )
-            .order_by(Assignment.created_at)
-        )
         active_count = 0
         for _ in db.scalars(
             select(Assignment).where(
@@ -96,7 +84,6 @@ def rank_candidates(
             )
         ):
             active_count += 1
-        _ = active
 
         vehicle = db.scalar(
             select(Vehicle).where(Vehicle.organization_id == org_id, Vehicle.driver_id == driver.id)
@@ -184,6 +171,11 @@ def assign(
     )
     db.add(assignment)
 
+    emit(
+        db, type="delivery.assigned", aggregate_type="delivery", aggregate_id=delivery_id,
+        organization_id=org_id, actor_id=actor_id,
+        payload={"driver_id": str(driver.id), "mode": mode},
+    )
     record(db, organization_id=org_id, actor_id=actor_id,
            action="dispatch.assigned", resource="delivery", resource_id=str(delivery_id))
     uow.commit()
@@ -192,13 +184,16 @@ def assign(
 
 
 def update_assignment_status(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, assignment_id: uuid.UUID, status: str
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    assignment_id: uuid.UUID, status: str,
 ) -> Assignment:
     if status not in ASSIGNMENT_STATUSES:
         raise ValidationError_(f"invalid status: {status}")
     db = uow.session
     a = db.scalar(
-        select(Assignment).where(Assignment.id == assignment_id, Assignment.organization_id == org_id)
+        select(Assignment).where(
+            Assignment.id == assignment_id, Assignment.organization_id == org_id
+        )
     )
     if not a:
         raise NotFoundError("assignment not found")
@@ -215,7 +210,8 @@ def update_assignment_status(
 
 
 def list_assignments(
-    uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID | None = None,
+    uow: UnitOfWork, org_id: uuid.UUID,
+    delivery_id: uuid.UUID | None = None,
     driver_id: uuid.UUID | None = None,
 ) -> list[Assignment]:
     q = select(Assignment).where(Assignment.organization_id == org_id)

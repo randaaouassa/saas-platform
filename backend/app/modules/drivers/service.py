@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.core.audit import record
 from app.core.errors import ConflictError, NotFoundError, ValidationError_
+from app.core.events.publisher import emit
 from app.core.uow import UnitOfWork
 from app.modules.drivers.models import (
     Driver,
@@ -28,7 +29,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# ---------- Driver ----------
 def create_driver(
     uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: DriverCreate
 ) -> Driver:
@@ -50,7 +50,9 @@ def create_driver(
     return d
 
 
-def list_drivers(uow: UnitOfWork, org_id: uuid.UUID, status: str | None = None) -> list[Driver]:
+def list_drivers(
+    uow: UnitOfWork, org_id: uuid.UUID, status: str | None = None
+) -> list[Driver]:
     q = select(Driver).where(Driver.organization_id == org_id)
     if status:
         q = q.where(Driver.status == status)
@@ -67,7 +69,8 @@ def get_driver(uow: UnitOfWork, org_id: uuid.UUID, driver_id: uuid.UUID) -> Driv
 
 
 def update_driver(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, driver_id: uuid.UUID, payload: DriverUpdate
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, driver_id: uuid.UUID,
+    payload: DriverUpdate,
 ) -> Driver:
     d = get_driver(uow, org_id, driver_id)
     data = payload.model_dump(exclude_unset=True)
@@ -75,6 +78,10 @@ def update_driver(
         raise ValidationError_(f"invalid status: {data['status']}")
     for k, v in data.items():
         setattr(d, k, v)
+    emit(
+        uow.session, type="driver.updated", aggregate_type="driver", aggregate_id=d.id,
+        organization_id=org_id, actor_id=actor_id, payload={"status": d.status},
+    )
     record(uow.session, organization_id=org_id, actor_id=actor_id,
            action="driver.updated", resource="driver", resource_id=str(d.id))
     uow.commit()
@@ -82,7 +89,6 @@ def update_driver(
     return d
 
 
-# ---------- Vehicle ----------
 def create_vehicle(
     uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: VehicleCreate
 ) -> Vehicle:
@@ -123,7 +129,6 @@ def list_vehicles(uow: UnitOfWork, org_id: uuid.UUID) -> list[Vehicle]:
     )
 
 
-# ---------- Shift ----------
 def start_shift(
     uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: ShiftStart
 ) -> DriverShift:
@@ -183,14 +188,15 @@ def end_shift(
     return shift
 
 
-def list_shifts(uow: UnitOfWork, org_id: uuid.UUID, driver_id: uuid.UUID | None = None) -> list[DriverShift]:
+def list_shifts(
+    uow: UnitOfWork, org_id: uuid.UUID, driver_id: uuid.UUID | None = None
+) -> list[DriverShift]:
     q = select(DriverShift).where(DriverShift.organization_id == org_id)
     if driver_id:
         q = q.where(DriverShift.driver_id == driver_id)
     return list(uow.session.scalars(q.order_by(DriverShift.started_at.desc())))
 
 
-# ---------- Position ----------
 def record_position(
     uow: UnitOfWork, org_id: uuid.UUID, driver_id: uuid.UUID, payload: PositionCreate
 ) -> DriverPosition:
@@ -205,12 +211,19 @@ def record_position(
         speed=payload.speed,
     )
     db.add(pos)
+    emit(
+        db, type="driver.location_updated", aggregate_type="driver", aggregate_id=driver_id,
+        organization_id=org_id, actor_id=driver_id,
+        payload={"lat": payload.lat, "lng": payload.lng},
+    )
     uow.commit()
     db.refresh(pos)
     return pos
 
 
-def latest_position(uow: UnitOfWork, org_id: uuid.UUID, driver_id: uuid.UUID) -> DriverPosition | None:
+def latest_position(
+    uow: UnitOfWork, org_id: uuid.UUID, driver_id: uuid.UUID
+) -> DriverPosition | None:
     return uow.session.scalar(
         select(DriverPosition)
         .where(

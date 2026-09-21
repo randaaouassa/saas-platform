@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.core.audit import record
 from app.core.errors import ConflictError, NotFoundError, ValidationError_
+from app.core.events.publisher import emit
 from app.core.uow import UnitOfWork
 from app.modules.deliveries.models import (
     Delivery,
@@ -61,21 +62,30 @@ def create_delivery(
         )
         if exists:
             raise ConflictError(f"package code already exists: {pkg.code}")
-        db.add(Package(
-            organization_id=org_id,
-            delivery_id=d.id,
-            code=pkg.code,
-            weight=pkg.weight,
-            length=pkg.length,
-            width=pkg.width,
-            height=pkg.height,
-            volume=pkg.volume,
-        ))
+        db.add(
+            Package(
+                organization_id=org_id,
+                delivery_id=d.id,
+                code=pkg.code,
+                weight=pkg.weight,
+                length=pkg.length,
+                width=pkg.width,
+                height=pkg.height,
+                volume=pkg.volume,
+            )
+        )
 
-    db.add(DeliveryStatusHistory(
-        organization_id=org_id, delivery_id=d.id,
-        from_status=None, to_status="pending", actor_id=actor_id,
-    ))
+    db.add(
+        DeliveryStatusHistory(
+            organization_id=org_id, delivery_id=d.id,
+            from_status=None, to_status="pending", actor_id=actor_id,
+        )
+    )
+    emit(
+        db, type="delivery.created", aggregate_type="delivery", aggregate_id=d.id,
+        organization_id=org_id, actor_id=actor_id,
+        payload={"dropoff": d.dropoff_location},
+    )
     record(db, organization_id=org_id, actor_id=actor_id,
            action="delivery.created", resource="delivery", resource_id=str(d.id))
     uow.commit()
@@ -83,7 +93,9 @@ def create_delivery(
     return d
 
 
-def list_deliveries(uow: UnitOfWork, org_id: uuid.UUID, status: str | None = None) -> list[Delivery]:
+def list_deliveries(
+    uow: UnitOfWork, org_id: uuid.UUID, status: str | None = None
+) -> list[Delivery]:
     q = select(Delivery).where(Delivery.organization_id == org_id)
     if status:
         q = q.where(Delivery.status == status)
@@ -121,11 +133,18 @@ def transition_delivery(
 
     d.status = target
 
-    db.add(DeliveryStatusHistory(
-        organization_id=org_id, delivery_id=d.id,
-        from_status=current, to_status=target, actor_id=actor_id,
-        lat=payload.lat, lng=payload.lng, note=payload.note,
-    ))
+    db.add(
+        DeliveryStatusHistory(
+            organization_id=org_id, delivery_id=d.id,
+            from_status=current, to_status=target, actor_id=actor_id,
+            lat=payload.lat, lng=payload.lng, note=payload.note,
+        )
+    )
+    emit(
+        db, type=f"delivery.{target}", aggregate_type="delivery", aggregate_id=d.id,
+        organization_id=org_id, actor_id=actor_id,
+        payload={"from": current, "lat": payload.lat, "lng": payload.lng},
+    )
     record(db, organization_id=org_id, actor_id=actor_id,
            action=f"delivery.{target}", resource="delivery", resource_id=str(d.id))
     uow.commit()
@@ -133,7 +152,9 @@ def transition_delivery(
     return d
 
 
-def list_history(uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID) -> list[DeliveryStatusHistory]:
+def list_history(
+    uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID
+) -> list[DeliveryStatusHistory]:
     get_delivery(uow, org_id, delivery_id)
     return list(
         uow.session.scalars(
@@ -148,7 +169,8 @@ def list_history(uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID) -> 
 
 
 def add_pod(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, delivery_id: uuid.UUID, payload: PODCreate
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, delivery_id: uuid.UUID,
+    payload: PODCreate,
 ) -> ProofOfDelivery:
     db = uow.session
     get_delivery(uow, org_id, delivery_id)
@@ -171,7 +193,9 @@ def add_pod(
     return pod
 
 
-def list_pods(uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID) -> list[ProofOfDelivery]:
+def list_pods(
+    uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID
+) -> list[ProofOfDelivery]:
     get_delivery(uow, org_id, delivery_id)
     return list(
         uow.session.scalars(

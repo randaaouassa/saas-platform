@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.core.audit import record
 from app.core.errors import NotFoundError, ValidationError_
+from app.core.events.publisher import emit
 from app.core.uow import UnitOfWork
 from app.modules.notifications.models import Notification, NotificationDelivery
 from app.modules.notifications.schemas import CHANNELS, NotificationCreate
@@ -45,6 +46,11 @@ def create_notification(
             )
         )
 
+    emit(
+        db, type="notification.created", aggregate_type="notification", aggregate_id=n.id,
+        organization_id=org_id, actor_id=actor_id,
+        payload={"channel": n.channel, "template": n.template},
+    )
     record(db, organization_id=org_id, actor_id=actor_id,
            action="notification.created", resource="notification", resource_id=str(n.id))
     uow.commit()
@@ -53,7 +59,8 @@ def create_notification(
 
 
 def list_notifications(
-    uow: UnitOfWork, org_id: uuid.UUID, user_id: uuid.UUID | None = None, unread_only: bool = False
+    uow: UnitOfWork, org_id: uuid.UUID,
+    user_id: uuid.UUID | None = None, unread_only: bool = False,
 ) -> list[Notification]:
     q = select(Notification).where(Notification.organization_id == org_id)
     if user_id:
@@ -63,7 +70,9 @@ def list_notifications(
     return list(uow.session.scalars(q.order_by(Notification.created_at.desc())))
 
 
-def get_notification(uow: UnitOfWork, org_id: uuid.UUID, notification_id: uuid.UUID) -> Notification:
+def get_notification(
+    uow: UnitOfWork, org_id: uuid.UUID, notification_id: uuid.UUID
+) -> Notification:
     n = uow.session.scalar(
         select(Notification).where(
             Notification.id == notification_id, Notification.organization_id == org_id
