@@ -11,6 +11,7 @@ from app.core.metrics import metrics_response
 from app.core.middleware import RequestIDMiddleware
 from app.core.otel import setup_tracing
 from app.core.rate_limit import RateLimitMiddleware
+from app.modules.analytics.router import router as analytics_router
 from app.modules.deliveries.router import router as deliveries_router
 from app.modules.dispatch.router import router as dispatch_router
 from app.modules.drivers.router import router as drivers_router
@@ -66,6 +67,7 @@ app.include_router(drivers_router, prefix=settings.API_V1_PREFIX)
 app.include_router(dispatch_router, prefix=settings.API_V1_PREFIX)
 app.include_router(routing_router, prefix=settings.API_V1_PREFIX)
 app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
+app.include_router(analytics_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tracking_router)
 
 
