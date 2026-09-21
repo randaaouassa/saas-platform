@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 
 def _register(client, slug=None):
@@ -19,7 +20,7 @@ def _register(client, slug=None):
 
 
 def test_ws_rejects_bad_token(client):
-    with pytest.raises(Exception):
+    with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws/tracking?token=bad") as ws:
             ws.receive_text()
 
