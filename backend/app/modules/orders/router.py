@@ -10,10 +10,15 @@ from app.modules.orders.schemas import (
     CustomerCreate,
     CustomerOut,
     CustomerUpdate,
+    OrderCancel,
     OrderCreate,
+    OrderImportRequest,
+    OrderImportResult,
+    OrderItemAdd,
     OrderOut,
     OrderStatusHistoryOut,
     OrderStatusUpdate,
+    OrderUpdate,
 )
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -30,7 +35,9 @@ def create_customer(
     user: User = Depends(STAFF),
     uow: UnitOfWork = Depends(get_uow),
 ) -> CustomerOut:
-    return CustomerOut.model_validate(service.create_customer(uow, user.organization_id, user.id, payload))
+    return CustomerOut.model_validate(
+        service.create_customer(uow, user.organization_id, user.id, payload)
+    )
 
 
 @customers_router.get("", response_model=list[CustomerOut])
@@ -38,7 +45,10 @@ def list_customers(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[CustomerOut]:
-    return [CustomerOut.model_validate(c) for c in service.list_customers(uow, user.organization_id)]
+    return [
+        CustomerOut.model_validate(c)
+        for c in service.list_customers(uow, user.organization_id)
+    ]
 
 
 @customers_router.get("/{customer_id}", response_model=CustomerOut)
@@ -47,7 +57,9 @@ def get_customer(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> CustomerOut:
-    return CustomerOut.model_validate(service.get_customer(uow, user.organization_id, customer_id))
+    return CustomerOut.model_validate(
+        service.get_customer(uow, user.organization_id, customer_id)
+    )
 
 
 @customers_router.patch("/{customer_id}", response_model=CustomerOut)
@@ -69,7 +81,19 @@ def create_order(
     user: User = Depends(STAFF),
     uow: UnitOfWork = Depends(get_uow),
 ) -> OrderOut:
-    return OrderOut.model_validate(service.create_order(uow, user.organization_id, user.id, payload))
+    return OrderOut.model_validate(
+        service.create_order(uow, user.organization_id, user.id, payload)
+    )
+
+
+@router.post("/import", response_model=OrderImportResult)
+def import_orders(
+    payload: OrderImportRequest,
+    user: User = Depends(MANAGER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> OrderImportResult:
+    result = service.import_orders(uow, user.organization_id, user.id, payload)
+    return OrderImportResult(**result)
 
 
 @router.get("", response_model=list[OrderOut])
@@ -78,7 +102,10 @@ def list_orders(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[OrderOut]:
-    return [OrderOut.model_validate(o) for o in service.list_orders(uow, user.organization_id, status_filter)]
+    return [
+        OrderOut.model_validate(o)
+        for o in service.list_orders(uow, user.organization_id, status_filter)
+    ]
 
 
 @router.get("/{order_id}", response_model=OrderOut)
@@ -87,7 +114,57 @@ def get_order(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> OrderOut:
-    return OrderOut.model_validate(service.get_order(uow, user.organization_id, order_id))
+    return OrderOut.model_validate(
+        service.get_order(uow, user.organization_id, order_id)
+    )
+
+
+@router.patch("/{order_id}", response_model=OrderOut)
+def update_order(
+    order_id: uuid.UUID,
+    payload: OrderUpdate,
+    user: User = Depends(STAFF),
+    uow: UnitOfWork = Depends(get_uow),
+) -> OrderOut:
+    return OrderOut.model_validate(
+        service.update_order(uow, user.organization_id, user.id, order_id, payload)
+    )
+
+
+@router.post("/{order_id}/items", response_model=OrderOut)
+def add_order_item(
+    order_id: uuid.UUID,
+    payload: OrderItemAdd,
+    user: User = Depends(STAFF),
+    uow: UnitOfWork = Depends(get_uow),
+) -> OrderOut:
+    return OrderOut.model_validate(
+        service.add_order_item(uow, user.organization_id, user.id, order_id, payload)
+    )
+
+
+@router.delete("/{order_id}/items/{item_id}", response_model=OrderOut)
+def remove_order_item(
+    order_id: uuid.UUID,
+    item_id: uuid.UUID,
+    user: User = Depends(STAFF),
+    uow: UnitOfWork = Depends(get_uow),
+) -> OrderOut:
+    return OrderOut.model_validate(
+        service.remove_order_item(uow, user.organization_id, user.id, order_id, item_id)
+    )
+
+
+@router.post("/{order_id}/cancel", response_model=OrderOut)
+def cancel_order(
+    order_id: uuid.UUID,
+    payload: OrderCancel,
+    user: User = Depends(STAFF),
+    uow: UnitOfWork = Depends(get_uow),
+) -> OrderOut:
+    return OrderOut.model_validate(
+        service.cancel_order(uow, user.organization_id, user.id, order_id, payload)
+    )
 
 
 @router.post("/{order_id}/status", response_model=OrderOut)
@@ -99,7 +176,9 @@ def transition_order(
     uow: UnitOfWork = Depends(get_uow),
 ) -> OrderOut:
     return OrderOut.model_validate(
-        service.transition_order(uow, user.organization_id, user.id, order_id, payload, warehouse_id)
+        service.transition_order(
+            uow, user.organization_id, user.id, order_id, payload, warehouse_id
+        )
     )
 
 

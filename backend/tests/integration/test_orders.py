@@ -21,14 +21,15 @@ def _h(token):
 
 
 def _setup_full(client, tok, qty="100"):
+    u = uuid.uuid4().hex[:6]
     wh = client.post(
         "/api/v1/warehouses",
-        json={"name": "WH", "code": "WH1"},
+        json={"name": "WH", "code": f"WH{u}"},
         headers=_h(tok),
     ).json()
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": f"SKU-{uuid.uuid4().hex[:6]}", "name": "Widget"},
+        json={"sku": f"SKU-{u}", "name": "Widget"},
         headers=_h(tok),
     ).json()
     client.post(
@@ -47,12 +48,13 @@ def _setup_full(client, tok, qty="100"):
 def test_create_customer_and_order(client):
     tok = _register(client)
     wh, p, c = _setup_full(client, tok)
+    u = uuid.uuid4().hex[:6]
 
     r = client.post(
         "/api/v1/orders",
         json={
             "customer_id": c["id"],
-            "number": "ORD-1",
+            "number": f"ORD-{u}",
             "currency": "USD",
             "warehouse_id": wh["id"],
             "items": [{"product_id": p["id"], "quantity": "5", "unit_price": "10.00"}],
@@ -69,9 +71,10 @@ def test_create_customer_and_order(client):
 def test_duplicate_order_number(client):
     tok = _register(client)
     wh, p, c = _setup_full(client, tok)
+    u = uuid.uuid4().hex[:6]
     payload = {
         "customer_id": c["id"],
-        "number": "ORD-1",
+        "number": f"ORD-{u}",
         "warehouse_id": wh["id"],
         "items": [{"product_id": p["id"], "quantity": "1", "unit_price": "1"}],
     }
@@ -82,19 +85,19 @@ def test_duplicate_order_number(client):
 def test_order_lifecycle_reserves_and_consumes_stock(client):
     tok = _register(client)
     wh, p, c = _setup_full(client, tok, qty="20")
+    u = uuid.uuid4().hex[:6]
 
     o = client.post(
         "/api/v1/orders",
         json={
             "customer_id": c["id"],
-            "number": "ORD-1",
+            "number": f"ORD-{u}",
             "warehouse_id": wh["id"],
             "items": [{"product_id": p["id"], "quantity": "5", "unit_price": "10"}],
         },
         headers=_h(tok),
     ).json()
 
-    # draft -> confirmed
     r = client.post(
         f"/api/v1/orders/{o['id']}/status",
         json={"status": "confirmed"},
@@ -103,7 +106,6 @@ def test_order_lifecycle_reserves_and_consumes_stock(client):
     assert r.status_code == 200
     assert r.json()["status"] == "confirmed"
 
-    # confirmed -> reserved (requires warehouse_id)
     r2 = client.post(
         f"/api/v1/orders/{o['id']}/status?warehouse_id={wh['id']}",
         json={"status": "reserved"},
@@ -115,7 +117,6 @@ def test_order_lifecycle_reserves_and_consumes_stock(client):
     stock = client.get("/api/v1/inventory/stock", headers=_h(tok)).json()
     assert float(stock[0]["reserved_quantity"]) == 5.0
 
-    # reserved -> picking -> packed -> ready_for_dispatch -> dispatched
     for s in ["picking", "packed", "ready_for_dispatch", "dispatched"]:
         r = client.post(
             f"/api/v1/orders/{o['id']}/status",
@@ -132,11 +133,12 @@ def test_order_lifecycle_reserves_and_consumes_stock(client):
 def test_invalid_transition(client):
     tok = _register(client)
     wh, p, c = _setup_full(client, tok)
+    u = uuid.uuid4().hex[:6]
     o = client.post(
         "/api/v1/orders",
         json={
             "customer_id": c["id"],
-            "number": "ORD-1",
+            "number": f"ORD-{u}",
             "warehouse_id": wh["id"],
             "items": [{"product_id": p["id"], "quantity": "1", "unit_price": "1"}],
         },
@@ -154,11 +156,12 @@ def test_invalid_transition(client):
 def test_cancellation_releases_reservations(client):
     tok = _register(client)
     wh, p, c = _setup_full(client, tok, qty="10")
+    u = uuid.uuid4().hex[:6]
     o = client.post(
         "/api/v1/orders",
         json={
             "customer_id": c["id"],
-            "number": "ORD-1",
+            "number": f"ORD-{u}",
             "warehouse_id": wh["id"],
             "items": [{"product_id": p["id"], "quantity": "3", "unit_price": "1"}],
         },
@@ -186,11 +189,12 @@ def test_cancellation_releases_reservations(client):
 def test_order_history(client):
     tok = _register(client)
     wh, p, c = _setup_full(client, tok)
+    u = uuid.uuid4().hex[:6]
     o = client.post(
         "/api/v1/orders",
         json={
             "customer_id": c["id"],
-            "number": "ORD-1",
+            "number": f"ORD-{u}",
             "warehouse_id": wh["id"],
             "items": [{"product_id": p["id"], "quantity": "1", "unit_price": "1"}],
         },
@@ -210,11 +214,12 @@ def test_tenant_isolation_orders(client):
     tok1 = _register(client)
     tok2 = _register(client)
     wh, p, c = _setup_full(client, tok1)
+    u = uuid.uuid4().hex[:6]
     client.post(
         "/api/v1/orders",
         json={
             "customer_id": c["id"],
-            "number": "ORD-1",
+            "number": f"ORD-{u}",
             "warehouse_id": wh["id"],
             "items": [{"product_id": p["id"], "quantity": "1", "unit_price": "1"}],
         },
@@ -223,3 +228,101 @@ def test_tenant_isolation_orders(client):
     r = client.get("/api/v1/orders", headers=_h(tok2))
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_update_add_remove_item(client):
+    tok = _register(client)
+    wh, p, c = _setup_full(client, tok)
+    u = uuid.uuid4().hex[:6]
+    o = client.post(
+        "/api/v1/orders",
+        json={
+            "customer_id": c["id"],
+            "number": f"ORD-{u}",
+            "warehouse_id": wh["id"],
+            "items": [{"product_id": p["id"], "quantity": "1", "unit_price": "10"}],
+        },
+        headers=_h(tok),
+    ).json()
+
+    r = client.patch(
+        f"/api/v1/orders/{o['id']}",
+        json={"notes": "urgent"},
+        headers=_h(tok),
+    )
+    assert r.status_code == 200
+    assert r.json()["notes"] == "urgent"
+
+    r2 = client.post(
+        f"/api/v1/orders/{o['id']}/items",
+        json={"product_id": p["id"], "quantity": "2", "unit_price": "10"},
+        headers=_h(tok),
+    )
+    assert r2.status_code == 200
+    assert float(r2.json()["total_amount"]) == 30.0
+    assert len(r2.json()["items"]) == 2
+
+    item_id = r2.json()["items"][-1]["id"]
+    r3 = client.delete(f"/api/v1/orders/{o['id']}/items/{item_id}", headers=_h(tok))
+    assert r3.status_code == 200
+    assert float(r3.json()["total_amount"]) == 10.0
+
+
+def test_cancel_order_direct(client):
+    tok = _register(client)
+    wh, p, c = _setup_full(client, tok)
+    u = uuid.uuid4().hex[:6]
+    o = client.post(
+        "/api/v1/orders",
+        json={
+            "customer_id": c["id"],
+            "number": f"ORD-{u}",
+            "warehouse_id": wh["id"],
+            "items": [{"product_id": p["id"], "quantity": "1", "unit_price": "1"}],
+        },
+        headers=_h(tok),
+    ).json()
+
+    r = client.post(
+        f"/api/v1/orders/{o['id']}/cancel",
+        json={"reason": "changed mind"},
+        headers=_h(tok),
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "cancelled"
+
+    r2 = client.post(
+        f"/api/v1/orders/{o['id']}/cancel",
+        json={"reason": "again"},
+        headers=_h(tok),
+    )
+    assert r2.status_code == 409
+
+
+def test_import_orders(client):
+    tok = _register(client)
+    wh, p, c = _setup_full(client, tok)
+    u = uuid.uuid4().hex[:6]
+
+    r = client.post(
+        "/api/v1/orders/import",
+        json={
+            "warehouse_id": wh["id"],
+            "rows": [
+                {
+                    "number": f"IMP-{u}-1",
+                    "customer_name": "Import Customer",
+                    "items": [{"product_id": p["id"], "quantity": "1", "unit_price": "5"}],
+                },
+                {
+                    "number": f"IMP-{u}-2",
+                    "customer_name": "Import Customer",
+                    "items": [{"product_id": p["id"], "quantity": "2", "unit_price": "5"}],
+                },
+            ],
+        },
+        headers=_h(tok),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] == 2
+    assert r.json()["errors"] == []

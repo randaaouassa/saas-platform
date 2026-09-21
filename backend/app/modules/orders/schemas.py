@@ -46,7 +46,7 @@ class CustomerOut(BaseModel):
 class OrderItemCreate(BaseModel):
     product_id: uuid.UUID
     quantity: Decimal = Field(gt=0)
-    unit_price: Decimal = Field(ge=0, default=Decimal(0))
+    unit_price: Decimal = Field(ge=0, default=Decimal("0"))
 
 
 class OrderItemOut(BaseModel):
@@ -59,14 +59,48 @@ class OrderItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OrderItemAdd(BaseModel):
+    product_id: uuid.UUID
+    quantity: Decimal = Field(gt=0)
+    unit_price: Decimal = Field(ge=0)
+
+
 # ---------- Order ----------
 class OrderCreate(BaseModel):
     customer_id: uuid.UUID
     number: str = Field(min_length=1, max_length=50)
     currency: str = Field(default="USD", min_length=3, max_length=3)
     notes: str = Field(default="", max_length=1000)
-    warehouse_id: uuid.UUID  # where to reserve stock from
+    warehouse_id: uuid.UUID
     items: list[OrderItemCreate] = Field(min_length=1)
+
+
+class OrderUpdate(BaseModel):
+    customer_id: uuid.UUID | None = None
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class OrderCancel(BaseModel):
+    reason: str = Field(min_length=1, max_length=255)
+
+
+class OrderImportRow(BaseModel):
+    number: str = Field(min_length=1, max_length=50)
+    customer_email: EmailStr | None = None
+    customer_name: str | None = Field(default=None, max_length=255)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    items: list[OrderItemCreate] = Field(min_length=1)
+
+
+class OrderImportRequest(BaseModel):
+    warehouse_id: uuid.UUID
+    rows: list[OrderImportRow] = Field(min_length=1)
+
+
+class OrderImportResult(BaseModel):
+    created: int
+    errors: list[dict]
 
 
 class OrderOut(BaseModel):
