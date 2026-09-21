@@ -92,5 +92,19 @@ services:
     depends_on:
       - prometheus
 
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    ports: ["5173:5173"]
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_WS_URL: ws://localhost:8000/ws/tracking
+    depends_on:
+      - api
+
 volumes:
   pgdata:
