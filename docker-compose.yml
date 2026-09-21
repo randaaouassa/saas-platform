@@ -28,6 +28,8 @@ services:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
       - ./backend/tests:/app/tests
+      - ./backend/pyproject.toml:/app/pyproject.toml:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
