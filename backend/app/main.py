@@ -18,6 +18,7 @@ from app.modules.identity.router import router as auth_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.orders.router import customers_router
 from app.modules.orders.router import router as orders_router
+from app.modules.routing.router import router as routing_router
 from app.modules.warehouse.router import router as warehouse_router
 
 configure_logging()
@@ -61,6 +62,7 @@ app.include_router(customers_router, prefix=settings.API_V1_PREFIX)
 app.include_router(deliveries_router, prefix=settings.API_V1_PREFIX)
 app.include_router(drivers_router, prefix=settings.API_V1_PREFIX)
 app.include_router(dispatch_router, prefix=settings.API_V1_PREFIX)
+app.include_router(routing_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health/live", tags=["system"])
