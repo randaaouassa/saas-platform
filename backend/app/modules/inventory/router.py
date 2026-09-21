@@ -9,6 +9,7 @@ from app.modules.inventory import service
 from app.modules.inventory.schemas import (
     AlertCreate,
     AlertOut,
+    AlertUpdate,
     MovementOut,
     ProductCreate,
     ProductOut,
@@ -18,6 +19,8 @@ from app.modules.inventory.schemas import (
     StockAdjust,
     StockOut,
     StockReceive,
+    StockTransfer,
+    TransferResult,
 )
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -33,7 +36,9 @@ def create_product(
     user: User = Depends(MANAGER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> ProductOut:
-    return ProductOut.model_validate(service.create_product(uow, user.organization_id, user.id, payload))
+    return ProductOut.model_validate(
+        service.create_product(uow, user.organization_id, user.id, payload)
+    )
 
 
 @router.get("/products", response_model=list[ProductOut])
@@ -41,7 +46,10 @@ def list_products(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[ProductOut]:
-    return [ProductOut.model_validate(p) for p in service.list_products(uow, user.organization_id)]
+    return [
+        ProductOut.model_validate(p)
+        for p in service.list_products(uow, user.organization_id)
+    ]
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
@@ -50,7 +58,9 @@ def get_product(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> ProductOut:
-    return ProductOut.model_validate(service.get_product(uow, user.organization_id, product_id))
+    return ProductOut.model_validate(
+        service.get_product(uow, user.organization_id, product_id)
+    )
 
 
 @router.patch("/products/{product_id}", response_model=ProductOut)
@@ -74,8 +84,9 @@ def receive_stock(
 ) -> StockOut:
     s = service.receive_stock(uow, user.organization_id, user.id, payload)
     return StockOut(
-        id=s.id, product_id=s.product_id, warehouse_id=s.warehouse_id, location_id=s.location_id,
-        quantity=s.quantity, reserved_quantity=s.reserved_quantity,
+        id=s.id, product_id=s.product_id, warehouse_id=s.warehouse_id,
+        location_id=s.location_id, quantity=s.quantity,
+        reserved_quantity=s.reserved_quantity,
         available=s.quantity - s.reserved_quantity,
     )
 
@@ -88,10 +99,25 @@ def adjust_stock(
 ) -> StockOut:
     s = service.adjust_stock(uow, user.organization_id, user.id, payload)
     return StockOut(
-        id=s.id, product_id=s.product_id, warehouse_id=s.warehouse_id, location_id=s.location_id,
-        quantity=s.quantity, reserved_quantity=s.reserved_quantity,
+        id=s.id, product_id=s.product_id, warehouse_id=s.warehouse_id,
+        location_id=s.location_id, quantity=s.quantity,
+        reserved_quantity=s.reserved_quantity,
         available=s.quantity - s.reserved_quantity,
     )
+
+
+@router.post("/stock/transfer", response_model=TransferResult)
+def transfer_stock(
+    payload: StockTransfer,
+    user: User = Depends(MANAGER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> TransferResult:
+    result = service.transfer_stock(
+        uow, user.organization_id, user.id,
+        payload.product_id, payload.from_warehouse_id,
+        payload.to_warehouse_id, payload.quantity,
+    )
+    return TransferResult(**result)
 
 
 @router.get("/stock", response_model=list[StockOut])
@@ -100,11 +126,16 @@ def list_stock(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[StockOut]:
-    return [StockOut(**row) for row in service.list_stock(uow, user.organization_id, warehouse_id)]
+    return [
+        StockOut(**row)
+        for row in service.list_stock(uow, user.organization_id, warehouse_id)
+    ]
 
 
 # ---------- Reservations ----------
-@router.post("/reservations", response_model=ReservationOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/reservations", response_model=ReservationOut, status_code=status.HTTP_201_CREATED
+)
 def create_reservation(
     payload: ReservationCreate,
     user: User = Depends(STAFF),
@@ -123,7 +154,9 @@ def release_reservation(
     uow: UnitOfWork = Depends(get_uow),
 ) -> ReservationOut:
     return ReservationOut.model_validate(
-        service.release_reservation(uow, user.organization_id, user.id, reservation_id, consume=consume)
+        service.release_reservation(
+            uow, user.organization_id, user.id, reservation_id, consume=consume
+        )
     )
 
 
@@ -134,7 +167,10 @@ def list_movements(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[MovementOut]:
-    return [MovementOut.model_validate(m) for m in service.list_movements(uow, user.organization_id, product_id)]
+    return [
+        MovementOut.model_validate(m)
+        for m in service.list_movements(uow, user.organization_id, product_id)
+    ]
 
 
 # ---------- Alerts ----------
@@ -144,7 +180,9 @@ def create_alert(
     user: User = Depends(MANAGER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> AlertOut:
-    return AlertOut.model_validate(service.create_alert(uow, user.organization_id, user.id, payload))
+    return AlertOut.model_validate(
+        service.create_alert(uow, user.organization_id, user.id, payload)
+    )
 
 
 @router.get("/alerts", response_model=list[AlertOut])
@@ -153,4 +191,40 @@ def list_alerts(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[AlertOut]:
-    return [AlertOut.model_validate(a) for a in service.list_alerts(uow, user.organization_id, only_triggered)]
+    return [
+        AlertOut.model_validate(a)
+        for a in service.list_alerts(uow, user.organization_id, only_triggered)
+    ]
+
+
+@router.patch("/alerts/{alert_id}", response_model=AlertOut)
+def update_alert(
+    alert_id: uuid.UUID,
+    payload: AlertUpdate,
+    user: User = Depends(MANAGER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> AlertOut:
+    return AlertOut.model_validate(
+        service.update_alert(
+            uow, user.organization_id, user.id, alert_id, payload.threshold
+        )
+    )
+
+
+@router.post("/alerts/{alert_id}/resolve", response_model=AlertOut)
+def resolve_alert(
+    alert_id: uuid.UUID,
+    user: User = Depends(MANAGER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> AlertOut:
+    return AlertOut.model_validate(
+        service.resolve_alert(uow, user.organization_id, user.id, alert_id)
+    )
+
+
+@router.post("/alerts/low-stock-scan", response_model=list[dict])
+def low_stock_scan(
+    user: User = Depends(MANAGER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> list[dict]:
+    return service.low_stock_scan(uow, user.organization_id, user.id)

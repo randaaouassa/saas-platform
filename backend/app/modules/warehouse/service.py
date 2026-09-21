@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -20,14 +20,18 @@ TASK_STATUSES = {"pending", "in_progress", "completed", "cancelled"}
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
 # ---------- Warehouse ----------
-def create_warehouse(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: WarehouseCreate) -> Warehouse:
+def create_warehouse(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: WarehouseCreate
+) -> Warehouse:
     db = uow.session
     exists = db.scalar(
-        select(Warehouse).where(Warehouse.organization_id == org_id, Warehouse.code == payload.code)
+        select(Warehouse).where(
+            Warehouse.organization_id == org_id, Warehouse.code == payload.code
+        )
     )
     if exists:
         raise ConflictError("warehouse code already exists")
@@ -53,14 +57,18 @@ def create_warehouse(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, pa
 def list_warehouses(uow: UnitOfWork, org_id: uuid.UUID) -> list[Warehouse]:
     return list(
         uow.session.scalars(
-            select(Warehouse).where(Warehouse.organization_id == org_id).order_by(Warehouse.created_at)
+            select(Warehouse)
+            .where(Warehouse.organization_id == org_id)
+            .order_by(Warehouse.created_at)
         )
     )
 
 
 def get_warehouse(uow: UnitOfWork, org_id: uuid.UUID, warehouse_id: uuid.UUID) -> Warehouse:
     wh = uow.session.scalar(
-        select(Warehouse).where(Warehouse.id == warehouse_id, Warehouse.organization_id == org_id)
+        select(Warehouse).where(
+            Warehouse.id == warehouse_id, Warehouse.organization_id == org_id
+        )
     )
     if not wh:
         raise NotFoundError("warehouse not found")
@@ -68,7 +76,8 @@ def get_warehouse(uow: UnitOfWork, org_id: uuid.UUID, warehouse_id: uuid.UUID) -
 
 
 def update_warehouse(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, warehouse_id: uuid.UUID, payload: WarehouseUpdate
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    warehouse_id: uuid.UUID, payload: WarehouseUpdate,
 ) -> Warehouse:
     wh = get_warehouse(uow, org_id, warehouse_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -80,9 +89,20 @@ def update_warehouse(
     return wh
 
 
+def delete_warehouse(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, warehouse_id: uuid.UUID
+) -> None:
+    wh = get_warehouse(uow, org_id, warehouse_id)
+    record(uow.session, organization_id=org_id, actor_id=actor_id,
+           action="warehouse.deleted", resource="warehouse", resource_id=str(wh.id))
+    uow.session.delete(wh)
+    uow.commit()
+
+
 # ---------- Zone ----------
 def create_zone(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, warehouse_id: uuid.UUID, payload: ZoneCreate
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    warehouse_id: uuid.UUID, payload: ZoneCreate,
 ) -> Zone:
     get_warehouse(uow, org_id, warehouse_id)
     exists = uow.session.scalar(
@@ -111,14 +131,30 @@ def list_zones(uow: UnitOfWork, org_id: uuid.UUID, warehouse_id: uuid.UUID) -> l
     get_warehouse(uow, org_id, warehouse_id)
     return list(
         uow.session.scalars(
-            select(Zone).where(Zone.organization_id == org_id, Zone.warehouse_id == warehouse_id)
+            select(Zone).where(
+                Zone.organization_id == org_id, Zone.warehouse_id == warehouse_id
+            )
         )
     )
 
 
+def delete_zone(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, zone_id: uuid.UUID
+) -> None:
+    db = uow.session
+    zone = db.scalar(select(Zone).where(Zone.id == zone_id, Zone.organization_id == org_id))
+    if not zone:
+        raise NotFoundError("zone not found")
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="zone.deleted", resource="zone", resource_id=str(zone.id))
+    db.delete(zone)
+    uow.commit()
+
+
 # ---------- Location ----------
 def create_location(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, zone_id: uuid.UUID, payload: LocationCreate
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    zone_id: uuid.UUID, payload: LocationCreate,
 ) -> Location:
     zone = uow.session.scalar(
         select(Zone).where(Zone.id == zone_id, Zone.organization_id == org_id)
@@ -148,16 +184,39 @@ def create_location(
     return loc
 
 
-def list_locations(uow: UnitOfWork, org_id: uuid.UUID, zone_id: uuid.UUID) -> list[Location]:
+def list_locations(
+    uow: UnitOfWork, org_id: uuid.UUID, zone_id: uuid.UUID
+) -> list[Location]:
     return list(
         uow.session.scalars(
-            select(Location).where(Location.organization_id == org_id, Location.zone_id == zone_id)
+            select(Location).where(
+                Location.organization_id == org_id, Location.zone_id == zone_id
+            )
         )
     )
 
 
+def delete_location(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, location_id: uuid.UUID
+) -> None:
+    db = uow.session
+    loc = db.scalar(
+        select(Location).where(
+            Location.id == location_id, Location.organization_id == org_id
+        )
+    )
+    if not loc:
+        raise NotFoundError("location not found")
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="location.deleted", resource="location", resource_id=str(loc.id))
+    db.delete(loc)
+    uow.commit()
+
+
 # ---------- Task ----------
-def create_task(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: TaskCreate) -> WarehouseTask:
+def create_task(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: TaskCreate
+) -> WarehouseTask:
     get_warehouse(uow, org_id, payload.warehouse_id)
     if payload.type not in TASK_TYPES:
         raise ValidationError_(f"invalid task type: {payload.type}")
@@ -181,12 +240,15 @@ def create_task(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload
 
 
 def set_task_status(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, task_id: uuid.UUID, status: str
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    task_id: uuid.UUID, status: str,
 ) -> WarehouseTask:
     if status not in TASK_STATUSES:
         raise ValidationError_(f"invalid task status: {status}")
     task = uow.session.scalar(
-        select(WarehouseTask).where(WarehouseTask.id == task_id, WarehouseTask.organization_id == org_id)
+        select(WarehouseTask).where(
+            WarehouseTask.id == task_id, WarehouseTask.organization_id == org_id
+        )
     )
     if not task:
         raise NotFoundError("task not found")

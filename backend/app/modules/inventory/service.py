@@ -44,9 +44,13 @@ def _now() -> datetime:
 
 
 # ---------- Product ----------
-def create_product(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: ProductCreate) -> Product:
+def create_product(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: ProductCreate
+) -> Product:
     db = uow.session
-    exists = db.scalar(select(Product).where(Product.organization_id == org_id, Product.sku == payload.sku))
+    exists = db.scalar(
+        select(Product).where(Product.organization_id == org_id, Product.sku == payload.sku)
+    )
     if exists:
         raise ConflictError("sku already exists")
 
@@ -63,7 +67,9 @@ def create_product(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payl
 def list_products(uow: UnitOfWork, org_id: uuid.UUID) -> list[Product]:
     return list(
         uow.session.scalars(
-            select(Product).where(Product.organization_id == org_id).order_by(Product.created_at)
+            select(Product)
+            .where(Product.organization_id == org_id)
+            .order_by(Product.created_at)
         )
     )
 
@@ -78,7 +84,8 @@ def get_product(uow: UnitOfWork, org_id: uuid.UUID, product_id: uuid.UUID) -> Pr
 
 
 def update_product(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, product_id: uuid.UUID, payload: ProductUpdate
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    product_id: uuid.UUID, payload: ProductUpdate,
 ) -> Product:
     p = get_product(uow, org_id, product_id)
     for k, v in payload.model_dump(exclude_unset=True).items():
@@ -92,7 +99,8 @@ def update_product(
 
 # ---------- Internal helpers ----------
 def _get_or_create_stock(
-    db: Session, org_id: uuid.UUID, product_id: uuid.UUID, warehouse_id: uuid.UUID, location_id: uuid.UUID | None
+    db: Session, org_id: uuid.UUID, product_id: uuid.UUID,
+    warehouse_id: uuid.UUID, location_id: uuid.UUID | None,
 ) -> Stock:
     q = select(Stock).where(
         Stock.organization_id == org_id,
@@ -145,7 +153,9 @@ def _log_movement(
     return m
 
 
-def _check_alerts(db: Session, org_id: uuid.UUID, product_id: uuid.UUID, warehouse_id: uuid.UUID) -> None:
+def _check_alerts(
+    db: Session, org_id: uuid.UUID, product_id: uuid.UUID, warehouse_id: uuid.UUID
+) -> None:
     alert = db.scalar(
         select(StockAlert).where(
             StockAlert.organization_id == org_id,
@@ -171,10 +181,14 @@ def _check_alerts(db: Session, org_id: uuid.UUID, product_id: uuid.UUID, warehou
 
 
 # ---------- Stock ----------
-def receive_stock(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: StockReceive) -> Stock:
+def receive_stock(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: StockReceive
+) -> Stock:
     db = uow.session
     get_product(uow, org_id, payload.product_id)
-    s = _get_or_create_stock(db, org_id, payload.product_id, payload.warehouse_id, payload.location_id)
+    s = _get_or_create_stock(
+        db, org_id, payload.product_id, payload.warehouse_id, payload.location_id
+    )
     s.quantity = s.quantity + payload.quantity
     _log_movement(
         db, org_id,
@@ -188,12 +202,16 @@ def receive_stock(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, paylo
     return s
 
 
-def adjust_stock(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: StockAdjust) -> Stock:
+def adjust_stock(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: StockAdjust
+) -> Stock:
     db = uow.session
     get_product(uow, org_id, payload.product_id)
     if payload.quantity == 0:
         raise ValidationError_("quantity must be non-zero")
-    s = _get_or_create_stock(db, org_id, payload.product_id, payload.warehouse_id, payload.location_id)
+    s = _get_or_create_stock(
+        db, org_id, payload.product_id, payload.warehouse_id, payload.location_id
+    )
     new_qty = s.quantity + payload.quantity
     if new_qty < 0:
         raise ValidationError_("adjustment would make stock negative")
@@ -211,7 +229,55 @@ def adjust_stock(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payloa
     return s
 
 
-def list_stock(uow: UnitOfWork, org_id: uuid.UUID, warehouse_id: uuid.UUID | None = None) -> list[dict]:
+def transfer_stock(
+    uow: UnitOfWork,
+    org_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    product_id: uuid.UUID,
+    from_warehouse_id: uuid.UUID,
+    to_warehouse_id: uuid.UUID,
+    quantity: Decimal,
+) -> dict:
+    db = uow.session
+    if quantity <= 0:
+        raise ValidationError_("quantity must be positive")
+    if from_warehouse_id == to_warehouse_id:
+        raise ValidationError_("source and destination must differ")
+    get_product(uow, org_id, product_id)
+
+    src = _get_or_create_stock(db, org_id, product_id, from_warehouse_id, None)
+    if (src.quantity - src.reserved_quantity) < quantity:
+        raise ConflictError("insufficient available stock at source")
+    src.quantity = src.quantity - quantity
+    _log_movement(
+        db, org_id,
+        product_id=product_id, warehouse_id=from_warehouse_id,
+        location_id=None, type="transfer_out",
+        quantity=-quantity, actor_id=actor_id,
+    )
+
+    dst = _get_or_create_stock(db, org_id, product_id, to_warehouse_id, None)
+    dst.quantity = dst.quantity + quantity
+    _log_movement(
+        db, org_id,
+        product_id=product_id, warehouse_id=to_warehouse_id,
+        location_id=None, type="transfer_in",
+        quantity=quantity, actor_id=actor_id,
+    )
+
+    _check_alerts(db, org_id, product_id, from_warehouse_id)
+    _check_alerts(db, org_id, product_id, to_warehouse_id)
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="stock.transferred", resource="product", resource_id=str(product_id),
+           metadata={"from": str(from_warehouse_id), "to": str(to_warehouse_id),
+                     "qty": str(quantity)})
+    uow.commit()
+    return {"from_stock_id": src.id, "to_stock_id": dst.id}
+
+
+def list_stock(
+    uow: UnitOfWork, org_id: uuid.UUID, warehouse_id: uuid.UUID | None = None
+) -> list[dict]:
     q = select(Stock).where(Stock.organization_id == org_id)
     if warehouse_id:
         q = q.where(Stock.warehouse_id == warehouse_id)
@@ -266,12 +332,14 @@ def reserve_stock(
 
 
 def release_reservation(
-    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, reservation_id: uuid.UUID, consume: bool = False
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    reservation_id: uuid.UUID, consume: bool = False,
 ) -> StockReservation:
     db = uow.session
     r = db.scalar(
         select(StockReservation).where(
-            StockReservation.id == reservation_id, StockReservation.organization_id == org_id
+            StockReservation.id == reservation_id,
+            StockReservation.organization_id == org_id,
         )
     )
     if not r:
@@ -313,7 +381,9 @@ def list_movements(
 
 
 # ---------- Alerts ----------
-def create_alert(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: AlertCreate) -> StockAlert:
+def create_alert(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: AlertCreate
+) -> StockAlert:
     db = uow.session
     get_product(uow, org_id, payload.product_id)
     a = StockAlert(
@@ -331,8 +401,85 @@ def create_alert(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payloa
     return a
 
 
-def list_alerts(uow: UnitOfWork, org_id: uuid.UUID, only_triggered: bool = False) -> list[StockAlert]:
+def list_alerts(
+    uow: UnitOfWork, org_id: uuid.UUID, only_triggered: bool = False
+) -> list[StockAlert]:
     q = select(StockAlert).where(StockAlert.organization_id == org_id)
     if only_triggered:
         q = q.where(StockAlert.triggered_at.is_not(None), StockAlert.resolved_at.is_(None))
     return list(uow.session.scalars(q.order_by(StockAlert.created_at.desc())))
+
+
+def update_alert(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    alert_id: uuid.UUID, threshold: Decimal,
+) -> StockAlert:
+    db = uow.session
+    a = db.scalar(
+        select(StockAlert).where(
+            StockAlert.id == alert_id, StockAlert.organization_id == org_id
+        )
+    )
+    if not a:
+        raise NotFoundError("alert not found")
+    a.threshold = threshold
+    _check_alerts(db, org_id, a.product_id, a.warehouse_id)
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="stock_alert.updated", resource="stock_alert", resource_id=str(a.id))
+    uow.commit()
+    db.refresh(a)
+    return a
+
+
+def resolve_alert(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, alert_id: uuid.UUID
+) -> StockAlert:
+    db = uow.session
+    a = db.scalar(
+        select(StockAlert).where(
+            StockAlert.id == alert_id, StockAlert.organization_id == org_id
+        )
+    )
+    if not a:
+        raise NotFoundError("alert not found")
+    a.resolved_at = _now()
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="stock_alert.resolved", resource="stock_alert", resource_id=str(a.id))
+    uow.commit()
+    db.refresh(a)
+    return a
+
+
+def low_stock_scan(uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID) -> list[dict]:
+    db = uow.session
+    alerts = list(
+        db.scalars(
+            select(StockAlert).where(
+                StockAlert.organization_id == org_id,
+                StockAlert.resolved_at.is_(None),
+            )
+        )
+    )
+    for a in alerts:
+        _check_alerts(db, org_id, a.product_id, a.warehouse_id)
+    uow.commit()
+    db.expire_all()
+
+    refreshed = list(
+        db.scalars(
+            select(StockAlert).where(
+                StockAlert.organization_id == org_id,
+                StockAlert.resolved_at.is_(None),
+                StockAlert.triggered_at.is_not(None),
+            )
+        )
+    )
+    return [
+        {
+            "alert_id": str(a.id),
+            "product_id": str(a.product_id),
+            "warehouse_id": str(a.warehouse_id),
+            "threshold": float(a.threshold),
+        }
+        for a in refreshed
+    ]

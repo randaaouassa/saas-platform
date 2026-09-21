@@ -61,8 +61,20 @@ class StockAdjust(BaseModel):
     product_id: uuid.UUID
     warehouse_id: uuid.UUID
     location_id: uuid.UUID | None = None
-    quantity: Decimal  # signed; positive add, negative subtract
+    quantity: Decimal
     reason: str = Field(default="", max_length=255)
+
+
+class StockTransfer(BaseModel):
+    product_id: uuid.UUID
+    from_warehouse_id: uuid.UUID
+    to_warehouse_id: uuid.UUID
+    quantity: Decimal = Field(gt=0)
+
+
+class TransferResult(BaseModel):
+    from_stock_id: uuid.UUID
+    to_stock_id: uuid.UUID
 
 
 class StockOut(BaseModel):
@@ -122,6 +134,10 @@ class MovementOut(BaseModel):
 class AlertCreate(BaseModel):
     product_id: uuid.UUID
     warehouse_id: uuid.UUID
+    threshold: Decimal = Field(ge=0)
+
+
+class AlertUpdate(BaseModel):
     threshold: Decimal = Field(ge=0)
 
 

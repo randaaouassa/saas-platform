@@ -20,20 +20,22 @@ def _h(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _setup_wh(client, tok):
+def _setup_wh(client, tok, code=None):
+    code = code or f"WH{uuid.uuid4().hex[:6]}"
     return client.post(
         "/api/v1/warehouses",
-        json={"name": "WH", "code": "WH1"},
+        json={"name": "WH", "code": code},
         headers=_h(tok),
     ).json()
 
 
 def test_create_product_and_duplicate(client):
     tok = _register(client)
-    payload = {"sku": "SKU1", "name": "Widget"}
+    sku = f"SKU-{uuid.uuid4().hex[:6]}"
+    payload = {"sku": sku, "name": "Widget"}
     r = client.post("/api/v1/inventory/products", json=payload, headers=_h(tok))
     assert r.status_code == 201, r.text
-    assert r.json()["sku"] == "SKU1"
+    assert r.json()["sku"] == sku
 
     r2 = client.post("/api/v1/inventory/products", json=payload, headers=_h(tok))
     assert r2.status_code == 409
@@ -44,7 +46,7 @@ def test_receive_stock_and_list(client):
     wh = _setup_wh(client, tok)
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": "SKU1", "name": "Widget"},
+        json={"sku": f"SKU-{uuid.uuid4().hex[:6]}", "name": "Widget"},
         headers=_h(tok),
     ).json()
 
@@ -66,7 +68,7 @@ def test_adjust_stock_cannot_go_negative(client):
     wh = _setup_wh(client, tok)
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": "SKU1", "name": "Widget"},
+        json={"sku": f"SKU-{uuid.uuid4().hex[:6]}", "name": "Widget"},
         headers=_h(tok),
     ).json()
 
@@ -89,7 +91,7 @@ def test_reservation_lifecycle(client):
     wh = _setup_wh(client, tok)
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": "SKU1", "name": "Widget"},
+        json={"sku": f"SKU-{uuid.uuid4().hex[:6]}", "name": "Widget"},
         headers=_h(tok),
     ).json()
     client.post(
@@ -114,11 +116,9 @@ def test_reservation_lifecycle(client):
     res = r.json()
     assert res["status"] == "active"
 
-    # available should be 30 now
     stock = client.get("/api/v1/inventory/stock", headers=_h(tok)).json()
     assert float(stock[0]["available"]) == 30.0
 
-    # consume the reservation
     r2 = client.post(
         f"/api/v1/inventory/reservations/{res['id']}/release?consume=true",
         headers=_h(tok),
@@ -136,7 +136,7 @@ def test_insufficient_stock_reservation(client):
     wh = _setup_wh(client, tok)
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": "SKU1", "name": "Widget"},
+        json={"sku": f"SKU-{uuid.uuid4().hex[:6]}", "name": "Widget"},
         headers=_h(tok),
     ).json()
     r = client.post(
@@ -158,7 +158,7 @@ def test_low_stock_alert_triggers(client):
     wh = _setup_wh(client, tok)
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": "SKU1", "name": "Widget"},
+        json={"sku": f"SKU-{uuid.uuid4().hex[:6]}", "name": "Widget"},
         headers=_h(tok),
     ).json()
     client.post(
@@ -171,7 +171,6 @@ def test_low_stock_alert_triggers(client):
         json={"product_id": p["id"], "warehouse_id": wh["id"], "threshold": "10"},
         headers=_h(tok),
     )
-    # trigger: adjust below threshold
     client.post(
         "/api/v1/inventory/stock/adjust",
         json={"product_id": p["id"], "warehouse_id": wh["id"], "quantity": "-1"},
@@ -188,7 +187,7 @@ def test_movement_history(client):
     wh = _setup_wh(client, tok)
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": "SKU1", "name": "Widget"},
+        json={"sku": f"SKU-{uuid.uuid4().hex[:6]}", "name": "Widget"},
         headers=_h(tok),
     ).json()
     client.post(
@@ -200,3 +199,115 @@ def test_movement_history(client):
     assert r.status_code == 200
     assert len(r.json()) == 1
     assert r.json()[0]["type"] == "receipt"
+
+
+def test_transfer_stock(client):
+    tok = _register(client)
+    a = _setup_wh(client, tok, code=f"A{uuid.uuid4().hex[:6]}")
+    b = _setup_wh(client, tok, code=f"B{uuid.uuid4().hex[:6]}")
+    p = client.post(
+        "/api/v1/inventory/products",
+        json={"sku": f"TR-{uuid.uuid4().hex[:6]}", "name": "Widget"},
+        headers=_h(tok),
+    ).json()
+    client.post(
+        "/api/v1/inventory/stock/receive",
+        json={"product_id": p["id"], "warehouse_id": a["id"], "quantity": "100"},
+        headers=_h(tok),
+    )
+
+    r = client.post(
+        "/api/v1/inventory/stock/transfer",
+        json={
+            "product_id": p["id"],
+            "from_warehouse_id": a["id"],
+            "to_warehouse_id": b["id"],
+            "quantity": "30",
+        },
+        headers=_h(tok),
+    )
+    assert r.status_code == 200, r.text
+
+    stock = client.get("/api/v1/inventory/stock", headers=_h(tok)).json()
+    by_wh = {s["warehouse_id"]: s for s in stock}
+    assert float(by_wh[a["id"]]["quantity"]) == 70.0
+    assert float(by_wh[b["id"]]["quantity"]) == 30.0
+
+
+def test_transfer_insufficient(client):
+    tok = _register(client)
+    a = _setup_wh(client, tok, code=f"A{uuid.uuid4().hex[:6]}")
+    b = _setup_wh(client, tok, code=f"B{uuid.uuid4().hex[:6]}")
+    p = client.post(
+        "/api/v1/inventory/products",
+        json={"sku": f"TR-{uuid.uuid4().hex[:6]}", "name": "Widget"},
+        headers=_h(tok),
+    ).json()
+    client.post(
+        "/api/v1/inventory/stock/receive",
+        json={"product_id": p["id"], "warehouse_id": a["id"], "quantity": "10"},
+        headers=_h(tok),
+    )
+    r = client.post(
+        "/api/v1/inventory/stock/transfer",
+        json={
+            "product_id": p["id"],
+            "from_warehouse_id": a["id"],
+            "to_warehouse_id": b["id"],
+            "quantity": "500",
+        },
+        headers=_h(tok),
+    )
+    assert r.status_code == 409
+
+
+def test_update_and_resolve_alert(client):
+    tok = _register(client)
+    wh = _setup_wh(client, tok)
+    p = client.post(
+        "/api/v1/inventory/products",
+        json={"sku": f"AL-{uuid.uuid4().hex[:6]}", "name": "Widget"},
+        headers=_h(tok),
+    ).json()
+    al = client.post(
+        "/api/v1/inventory/alerts",
+        json={"product_id": p["id"], "warehouse_id": wh["id"], "threshold": "5"},
+        headers=_h(tok),
+    ).json()
+
+    r = client.patch(
+        f"/api/v1/inventory/alerts/{al['id']}",
+        json={"threshold": "10"},
+        headers=_h(tok),
+    )
+    assert r.status_code == 200
+    assert float(r.json()["threshold"]) == 10.0
+
+    r2 = client.post(
+        f"/api/v1/inventory/alerts/{al['id']}/resolve", headers=_h(tok)
+    )
+    assert r2.status_code == 200
+    assert r2.json()["resolved_at"] is not None
+
+
+def test_low_stock_scan(client):
+    tok = _register(client)
+    wh = _setup_wh(client, tok)
+    p = client.post(
+        "/api/v1/inventory/products",
+        json={"sku": f"SC-{uuid.uuid4().hex[:6]}", "name": "Widget"},
+        headers=_h(tok),
+    ).json()
+    client.post(
+        "/api/v1/inventory/stock/receive",
+        json={"product_id": p["id"], "warehouse_id": wh["id"], "quantity": "10"},
+        headers=_h(tok),
+    )
+    client.post(
+        "/api/v1/inventory/alerts",
+        json={"product_id": p["id"], "warehouse_id": wh["id"], "threshold": "200"},
+        headers=_h(tok),
+    )
+    r = client.post("/api/v1/inventory/alerts/low-stock-scan", headers=_h(tok))
+    assert r.status_code == 200
+    assert len(r.json()) == 1
