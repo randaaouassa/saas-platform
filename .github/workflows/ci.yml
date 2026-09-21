@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (lint + test + audit)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: saas_platform
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-retries=10
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: saas_platform
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      SECRET_KEY: ci-secret
+      ENV: ci
+      RATE_LIMIT_ENABLED: "false"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pip-audit
+
+      - name: Lint (ruff)
+        run: ruff check app tests
+
+      - name: Security audit (pip-audit)
+        run: pip-audit || true
+
+      - name: Run migrations
+        run: alembic upgrade head
+
+      - name: Tests (coverage gate 70%)
+        run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=70
