@@ -1,0 +1,29 @@
+groups:
+  - name: api
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "API is down"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.01
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "5xx error rate > 1%"
+
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 0.4
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 latency > 400ms"

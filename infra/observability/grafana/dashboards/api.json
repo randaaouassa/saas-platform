@@ -1,0 +1,48 @@
+{
+    "title": "API",
+    "uid": "api",
+    "schemaVersion": 39,
+    "refresh": "10s",
+    "panels": [
+        {
+            "type": "timeseries",
+            "title": "Requests by path",
+            "gridPos": {
+                "x": 0,
+                "y": 0,
+                "w": 24,
+                "h": 8
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(http_requests_total[1m])) by (path, method)",
+                    "legendFormat": "{{method}} {{path}}"
+                }
+            ]
+        },
+        {
+            "type": "timeseries",
+            "title": "p50/p95/p99 latency",
+            "gridPos": {
+                "x": 0,
+                "y": 8,
+                "w": 24,
+                "h": 8
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.5, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "p50"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "p95"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "p99"
+                }
+            ]
+        }
+    ]
+}

@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.idempotency import IdempotencyMiddleware
 from app.core.logging import configure_logging, get_logger
-from app.core.metrics import metrics_response
+from app.core.metrics import MetricsMiddleware, metrics_response
 from app.core.middleware import RequestIDMiddleware
 from app.core.otel import setup_tracing
 from app.core.rate_limit import RateLimitMiddleware
@@ -54,6 +54,7 @@ app.add_middleware(
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(MetricsMiddleware)
 
 register_exception_handlers(app)
 
