@@ -43,6 +43,8 @@ jobs:
       SECRET_KEY: ci-secret
       ENV: ci
       RATE_LIMIT_ENABLED: "false"
+      SUPER_ADMIN_EMAIL: super@platform.io
+      SUPER_ADMIN_PASSWORD: changeme123
 
     defaults:
       run:
