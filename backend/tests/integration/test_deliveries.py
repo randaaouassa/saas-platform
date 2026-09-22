@@ -22,13 +22,14 @@ def _h(tok):
 
 def test_create_delivery_with_packages(client):
     tok = _register(client)
+    u = uuid.uuid4().hex[:6]
     r = client.post(
         "/api/v1/deliveries",
         json={
             "dropoff_location": "1 Main St",
             "dropoff_lat": 1.0,
             "dropoff_lng": 2.0,
-            "packages": [{"code": "PKG-1", "weight": "1.5"}],
+            "packages": [{"code": f"PKG-{u}", "weight": "1.5"}],
         },
         headers=_h(tok),
     )
@@ -40,9 +41,10 @@ def test_create_delivery_with_packages(client):
 
 def test_duplicate_package_code(client):
     tok = _register(client)
+    u = uuid.uuid4().hex[:6]
     payload = {
         "dropoff_location": "X",
-        "packages": [{"code": "PKG-1"}],
+        "packages": [{"code": f"PKG-{u}"}],
     }
     assert client.post("/api/v1/deliveries", json=payload, headers=_h(tok)).status_code == 201
     assert client.post("/api/v1/deliveries", json=payload, headers=_h(tok)).status_code == 409
@@ -158,5 +160,78 @@ def test_tenant_isolation(client):
         headers=_h(tok1),
     )
     r = client.get("/api/v1/deliveries", headers=_h(tok2))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_update_delivery(client):
+    tok = _register(client)
+    d = client.post(
+        "/api/v1/deliveries",
+        json={"dropoff_location": "Old"},
+        headers=_h(tok),
+    ).json()
+
+    r = client.patch(
+        f"/api/v1/deliveries/{d['id']}",
+        json={"dropoff_location": "New"},
+        headers=_h(tok),
+    )
+    assert r.status_code == 200
+    assert r.json()["dropoff_location"] == "New"
+
+
+def test_cancel_delivery(client):
+    tok = _register(client)
+    d = client.post(
+        "/api/v1/deliveries",
+        json={"dropoff_location": "X"},
+        headers=_h(tok),
+    ).json()
+
+    r = client.post(
+        f"/api/v1/deliveries/{d['id']}/cancel",
+        json={"reason": "no longer needed"},
+        headers=_h(tok),
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "cancelled"
+
+    r2 = client.post(
+        f"/api/v1/deliveries/{d['id']}/cancel",
+        json={"reason": "again"},
+        headers=_h(tok),
+    )
+    assert r2.status_code == 409
+
+
+def test_reschedule_delivery(client):
+    tok = _register(client)
+    d = client.post(
+        "/api/v1/deliveries",
+        json={"dropoff_location": "X"},
+        headers=_h(tok),
+    ).json()
+    client.post(f"/api/v1/deliveries/{d['id']}/status", json={"status": "assigned"}, headers=_h(tok))
+    client.post(f"/api/v1/deliveries/{d['id']}/status", json={"status": "picked_up"}, headers=_h(tok))
+    client.post(
+        f"/api/v1/deliveries/{d['id']}/status",
+        json={"status": "failed", "failed_reason": "busy"},
+        headers=_h(tok),
+    )
+
+    r = client.post(
+        f"/api/v1/deliveries/{d['id']}/reschedule",
+        json={"scheduled_at": "2026-06-01T10:00:00Z"},
+        headers=_h(tok),
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "rescheduled"
+    assert r.json()["failed_reason"] is None
+
+
+def test_my_deliveries_empty_for_non_driver(client):
+    tok = _register(client)
+    r = client.get("/api/v1/deliveries/mine", headers=_h(tok))
     assert r.status_code == 200
     assert r.json() == []

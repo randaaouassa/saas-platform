@@ -14,10 +14,14 @@ from app.modules.deliveries.models import (
     ProofOfDelivery,
 )
 from app.modules.deliveries.schemas import (
+    DeliveryCancel,
     DeliveryCreate,
+    DeliveryReschedule,
     DeliveryStatusUpdate,
+    DeliveryUpdate,
     PODCreate,
 )
+from app.modules.dispatch.models import Assignment
 
 DELIVERY_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"assigned", "cancelled"},
@@ -30,6 +34,8 @@ DELIVERY_TRANSITIONS: dict[str, set[str]] = {
     "returned": set(),
     "cancelled": set(),
 }
+
+FINAL_STATES = {"delivered", "returned", "cancelled"}
 
 
 def _now() -> datetime:
@@ -58,7 +64,9 @@ def create_delivery(
 
     for pkg in payload.packages:
         exists = db.scalar(
-            select(Package).where(Package.organization_id == org_id, Package.code == pkg.code)
+            select(Package).where(
+                Package.organization_id == org_id, Package.code == pkg.code
+            )
         )
         if exists:
             raise ConflictError(f"package code already exists: {pkg.code}")
@@ -81,11 +89,9 @@ def create_delivery(
             from_status=None, to_status="pending", actor_id=actor_id,
         )
     )
-    emit(
-        db, type="delivery.created", aggregate_type="delivery", aggregate_id=d.id,
-        organization_id=org_id, actor_id=actor_id,
-        payload={"dropoff": d.dropoff_location},
-    )
+    emit(db, type="delivery.created", aggregate_type="delivery", aggregate_id=d.id,
+         organization_id=org_id, actor_id=actor_id,
+         payload={"dropoff": d.dropoff_location})
     record(db, organization_id=org_id, actor_id=actor_id,
            action="delivery.created", resource="delivery", resource_id=str(d.id))
     uow.commit()
@@ -104,10 +110,82 @@ def list_deliveries(
 
 def get_delivery(uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID) -> Delivery:
     d = uow.session.scalar(
-        select(Delivery).where(Delivery.id == delivery_id, Delivery.organization_id == org_id)
+        select(Delivery).where(
+            Delivery.id == delivery_id, Delivery.organization_id == org_id
+        )
     )
     if not d:
         raise NotFoundError("delivery not found")
+    return d
+
+
+def update_delivery(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    delivery_id: uuid.UUID, payload: DeliveryUpdate,
+) -> Delivery:
+    d = get_delivery(uow, org_id, delivery_id)
+    if d.status in FINAL_STATES:
+        raise ConflictError(f"cannot update delivery in status {d.status}")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(d, k, v)
+    record(uow.session, organization_id=org_id, actor_id=actor_id,
+           action="delivery.updated", resource="delivery", resource_id=str(d.id))
+    uow.commit()
+    uow.session.refresh(d)
+    return d
+
+
+def cancel_delivery(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    delivery_id: uuid.UUID, payload: DeliveryCancel,
+) -> Delivery:
+    db = uow.session
+    d = get_delivery(uow, org_id, delivery_id)
+    if d.status in FINAL_STATES:
+        raise ConflictError(f"cannot cancel delivery in status {d.status}")
+
+    prev = d.status
+    d.status = "cancelled"
+    d.failed_reason = payload.reason
+    db.add(
+        DeliveryStatusHistory(
+            organization_id=org_id, delivery_id=d.id,
+            from_status=prev, to_status="cancelled",
+            actor_id=actor_id, note=payload.reason,
+        )
+    )
+    emit(db, type="delivery.cancelled", aggregate_type="delivery", aggregate_id=d.id,
+         organization_id=org_id, actor_id=actor_id, payload={"reason": payload.reason})
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="delivery.cancelled", resource="delivery", resource_id=str(d.id))
+    uow.commit()
+    db.refresh(d)
+    return d
+
+
+def reschedule_delivery(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    delivery_id: uuid.UUID, payload: DeliveryReschedule,
+) -> Delivery:
+    db = uow.session
+    d = get_delivery(uow, org_id, delivery_id)
+    if d.status not in {"pending", "failed", "rescheduled"}:
+        raise ConflictError(f"cannot reschedule in status {d.status}")
+
+    prev = d.status
+    d.status = "rescheduled"
+    d.scheduled_at = payload.scheduled_at
+    d.failed_reason = None
+    db.add(
+        DeliveryStatusHistory(
+            organization_id=org_id, delivery_id=d.id,
+            from_status=prev, to_status="rescheduled", actor_id=actor_id,
+        )
+    )
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="delivery.rescheduled", resource="delivery", resource_id=str(d.id))
+    uow.commit()
+    db.refresh(d)
     return d
 
 
@@ -140,11 +218,9 @@ def transition_delivery(
             lat=payload.lat, lng=payload.lng, note=payload.note,
         )
     )
-    emit(
-        db, type=f"delivery.{target}", aggregate_type="delivery", aggregate_id=d.id,
-        organization_id=org_id, actor_id=actor_id,
-        payload={"from": current, "lat": payload.lat, "lng": payload.lng},
-    )
+    emit(db, type=f"delivery.{target}", aggregate_type="delivery", aggregate_id=d.id,
+         organization_id=org_id, actor_id=actor_id,
+         payload={"from": current, "lat": payload.lat, "lng": payload.lng})
     record(db, organization_id=org_id, actor_id=actor_id,
            action=f"delivery.{target}", resource="delivery", resource_id=str(d.id))
     uow.commit()
@@ -164,6 +240,33 @@ def list_history(
                 DeliveryStatusHistory.delivery_id == delivery_id,
             )
             .order_by(DeliveryStatusHistory.created_at)
+        )
+    )
+
+
+def list_my_deliveries(
+    uow: UnitOfWork, org_id: uuid.UUID, user_id: uuid.UUID
+) -> list[Delivery]:
+    from app.modules.drivers.models import Driver
+
+    db = uow.session
+    driver = db.scalar(
+        select(Driver).where(
+            Driver.organization_id == org_id, Driver.user_id == user_id
+        )
+    )
+    if not driver:
+        return []
+    return list(
+        db.scalars(
+            select(Delivery)
+            .join(Assignment, Assignment.delivery_id == Delivery.id)
+            .where(
+                Delivery.organization_id == org_id,
+                Assignment.driver_id == driver.id,
+                Assignment.status.in_(["offered", "accepted"]),
+            )
+            .order_by(Delivery.created_at.desc())
         )
     )
 

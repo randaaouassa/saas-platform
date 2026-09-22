@@ -5,10 +5,13 @@ from fastapi import APIRouter, Depends, status
 from app.core.uow import UnitOfWork, get_uow
 from app.modules.deliveries import service
 from app.modules.deliveries.schemas import (
+    DeliveryCancel,
     DeliveryCreate,
     DeliveryOut,
+    DeliveryReschedule,
     DeliveryStatusHistoryOut,
     DeliveryStatusUpdate,
+    DeliveryUpdate,
     PODCreate,
     PODOut,
 )
@@ -26,7 +29,9 @@ def create_delivery(
     user: User = Depends(STAFF),
     uow: UnitOfWork = Depends(get_uow),
 ) -> DeliveryOut:
-    return DeliveryOut.model_validate(service.create_delivery(uow, user.organization_id, user.id, payload))
+    return DeliveryOut.model_validate(
+        service.create_delivery(uow, user.organization_id, user.id, payload)
+    )
 
 
 @router.get("", response_model=list[DeliveryOut])
@@ -41,13 +46,64 @@ def list_deliveries(
     ]
 
 
+@router.get("/mine", response_model=list[DeliveryOut])
+def list_my_deliveries(
+    user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
+) -> list[DeliveryOut]:
+    return [
+        DeliveryOut.model_validate(d)
+        for d in service.list_my_deliveries(uow, user.organization_id, user.id)
+    ]
+
+
 @router.get("/{delivery_id}", response_model=DeliveryOut)
 def get_delivery(
     delivery_id: uuid.UUID,
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> DeliveryOut:
-    return DeliveryOut.model_validate(service.get_delivery(uow, user.organization_id, delivery_id))
+    return DeliveryOut.model_validate(
+        service.get_delivery(uow, user.organization_id, delivery_id)
+    )
+
+
+@router.patch("/{delivery_id}", response_model=DeliveryOut)
+def update_delivery(
+    delivery_id: uuid.UUID,
+    payload: DeliveryUpdate,
+    user: User = Depends(STAFF),
+    uow: UnitOfWork = Depends(get_uow),
+) -> DeliveryOut:
+    return DeliveryOut.model_validate(
+        service.update_delivery(uow, user.organization_id, user.id, delivery_id, payload)
+    )
+
+
+@router.post("/{delivery_id}/cancel", response_model=DeliveryOut)
+def cancel_delivery(
+    delivery_id: uuid.UUID,
+    payload: DeliveryCancel,
+    user: User = Depends(STAFF),
+    uow: UnitOfWork = Depends(get_uow),
+) -> DeliveryOut:
+    return DeliveryOut.model_validate(
+        service.cancel_delivery(uow, user.organization_id, user.id, delivery_id, payload)
+    )
+
+
+@router.post("/{delivery_id}/reschedule", response_model=DeliveryOut)
+def reschedule_delivery(
+    delivery_id: uuid.UUID,
+    payload: DeliveryReschedule,
+    user: User = Depends(STAFF),
+    uow: UnitOfWork = Depends(get_uow),
+) -> DeliveryOut:
+    return DeliveryOut.model_validate(
+        service.reschedule_delivery(
+            uow, user.organization_id, user.id, delivery_id, payload
+        )
+    )
 
 
 @router.post("/{delivery_id}/status", response_model=DeliveryOut)
@@ -57,8 +113,11 @@ def transition_delivery(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> DeliveryOut:
-    d = service.transition_delivery(uow, user.organization_id, user.id, delivery_id, payload)
-    return DeliveryOut.model_validate(d)
+    return DeliveryOut.model_validate(
+        service.transition_delivery(
+            uow, user.organization_id, user.id, delivery_id, payload
+        )
+    )
 
 
 @router.get("/{delivery_id}/history", response_model=list[DeliveryStatusHistoryOut])

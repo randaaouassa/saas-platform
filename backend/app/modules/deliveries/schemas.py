@@ -42,6 +42,24 @@ class DeliveryCreate(BaseModel):
     packages: list[PackageCreate] = []
 
 
+class DeliveryUpdate(BaseModel):
+    pickup_location: str | None = Field(default=None, max_length=500)
+    pickup_lat: float | None = None
+    pickup_lng: float | None = None
+    dropoff_location: str | None = Field(default=None, min_length=1, max_length=500)
+    dropoff_lat: float | None = None
+    dropoff_lng: float | None = None
+    scheduled_at: datetime | None = None
+
+
+class DeliveryCancel(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class DeliveryReschedule(BaseModel):
+    scheduled_at: datetime
+
+
 class DeliveryOut(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
