@@ -22,9 +22,11 @@ from app.modules.identity.models import (
     PasswordResetToken,
     Permission,
     Role,
-    Session as SessionModel,
     User,
     UserRole,
+)
+from app.modules.identity.models import (
+    Session as SessionModel,
 )
 from app.modules.identity.schemas import (
     AcceptInviteRequest,
