@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
 from app.core.events import service
+from app.core.events.consumer import handle_event
 from app.core.events.models import DomainEvent
 from app.modules.tracking.pubsub import publish
 
@@ -57,7 +58,12 @@ def dispatch_once(batch_size: int = 100, session: Session | None = None) -> int:
                     publish(e.organization_id, topic, _envelope(e))
                 except Exception as ex:
                     log.warning("publish_failed", error=str(ex), event_id=str(e.id))
-                    continue
+
+            try:
+                handle_event(db, e)
+            except Exception as ex:
+                log.warning("event_consumer_failed", error=str(ex), event_id=str(e.id))
+
             published_ids.append(e.id)
 
         service.mark_published(db, published_ids)
