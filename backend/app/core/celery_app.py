@@ -32,6 +32,7 @@ celery_app.conf.update(
         "app.modules.notifications.*": {"queue": "notifications"},
         "app.modules.routing.*": {"queue": "routing"},
         "app.modules.analytics.*": {"queue": "analytics"},
+        "dispatch.*": {"queue": "routing"},
     },
     task_default_retry_delay=10,
     task_max_retries=5,
@@ -46,5 +47,6 @@ celery_app.autodiscover_tasks(
     [
         "app.modules.notifications.tasks",
         "app.modules.analytics.tasks",
+        "app.modules.dispatch.tasks",
     ]
 )

@@ -9,11 +9,12 @@ from app.core.audit import record
 from app.core.errors import ConflictError, NotFoundError, ValidationError_
 from app.core.events.publisher import emit
 from app.core.uow import UnitOfWork
-from app.modules.deliveries.models import Delivery
+from app.modules.deliveries.models import Delivery, Package
 from app.modules.dispatch.models import Assignment, DispatchEvent
 from app.modules.drivers.models import Driver, DriverPosition, Vehicle
 
 ASSIGNMENT_STATUSES = {"offered", "accepted", "rejected", "expired", "completed"}
+ACTIVE_STATUSES = {"offered", "accepted"}
 
 
 def _now() -> datetime:
@@ -39,10 +40,24 @@ def _get_delivery(uow: UnitOfWork, org_id: uuid.UUID, delivery_id: uuid.UUID) ->
     return d
 
 
-def _candidate_score(distance_km: float | None, active_deliveries: int) -> float:
+def _package_weight(db, delivery_id: uuid.UUID) -> float:
+    total = Decimal("0")
+    for p in db.scalars(select(Package).where(Package.delivery_id == delivery_id)):
+        total += Decimal(p.weight or 0)
+    return float(total)
+
+
+def _candidate_score(
+    distance_km: float | None,
+    active_deliveries: int,
+    capacity_ok: bool,
+) -> float:
     distance_score = 100.0 if distance_km is None else max(0.0, 100.0 - distance_km * 5.0)
     workload_score = max(0.0, 100.0 - active_deliveries * 20.0)
-    return 0.7 * distance_score + 0.3 * workload_score
+    base = 0.7 * distance_score + 0.3 * workload_score
+    if not capacity_ok:
+        base *= 0.3
+    return base
 
 
 def rank_candidates(
@@ -50,6 +65,7 @@ def rank_candidates(
 ) -> list[dict]:
     db = uow.session
     delivery = _get_delivery(uow, org_id, delivery_id)
+    pkg_weight = _package_weight(db, delivery_id)
 
     drivers = list(
         db.scalars(
@@ -80,16 +96,21 @@ def rank_candidates(
             select(Assignment).where(
                 Assignment.organization_id == org_id,
                 Assignment.driver_id == driver.id,
-                Assignment.status.in_(["offered", "accepted"]),
+                Assignment.status.in_(ACTIVE_STATUSES),
             )
         ):
             active_count += 1
 
         vehicle = db.scalar(
-            select(Vehicle).where(Vehicle.organization_id == org_id, Vehicle.driver_id == driver.id)
+            select(Vehicle).where(
+                Vehicle.organization_id == org_id, Vehicle.driver_id == driver.id
+            )
         )
 
-        score = _candidate_score(distance_km, active_count)
+        capacity = float(vehicle.capacity_weight) if vehicle and vehicle.capacity_weight else None
+        capacity_ok = capacity is None or pkg_weight <= capacity
+
+        score = _candidate_score(distance_km, active_count, capacity_ok)
 
         candidates.append(
             {
@@ -99,10 +120,16 @@ def rank_candidates(
                 "vehicle_id": vehicle.id if vehicle else None,
                 "distance_km": round(distance_km, 3) if distance_km is not None else None,
                 "active_deliveries": active_count,
+                "package_weight": pkg_weight,
+                "vehicle_capacity": capacity,
+                "capacity_ok": capacity_ok,
                 "score": round(score, 3),
                 "factors": {
                     "distance_km": distance_km,
                     "active_deliveries": active_count,
+                    "package_weight": pkg_weight,
+                    "vehicle_capacity": capacity,
+                    "capacity_ok": capacity_ok,
                 },
             }
         )
@@ -116,10 +143,7 @@ def rank_candidates(
                 delivery_id=delivery_id,
                 candidate_driver_id=c["driver_id"],
                 score=Decimal(str(c["score"])),
-                factors_json={
-                    "distance_km": c["factors"]["distance_km"],
-                    "active_deliveries": c["factors"]["active_deliveries"],
-                },
+                factors_json=c["factors"],
             )
         )
     record(db, organization_id=org_id, actor_id=actor_id,
@@ -141,6 +165,16 @@ def assign(
     delivery = _get_delivery(uow, org_id, delivery_id)
     if delivery.status not in {"pending", "rescheduled"}:
         raise ConflictError(f"cannot assign delivery in status {delivery.status}")
+
+    existing = db.scalar(
+        select(Assignment).where(
+            Assignment.organization_id == org_id,
+            Assignment.delivery_id == delivery_id,
+            Assignment.status.in_(ACTIVE_STATUSES),
+        )
+    )
+    if existing:
+        raise ConflictError("delivery already has an active assignment")
 
     if driver_id is None:
         candidates = rank_candidates(uow, org_id, actor_id, delivery_id)
@@ -171,16 +205,101 @@ def assign(
     )
     db.add(assignment)
 
-    emit(
-        db, type="delivery.assigned", aggregate_type="delivery", aggregate_id=delivery_id,
-        organization_id=org_id, actor_id=actor_id,
-        payload={"driver_id": str(driver.id), "mode": mode},
-    )
+    emit(db, type="delivery.assigned", aggregate_type="delivery", aggregate_id=delivery_id,
+         organization_id=org_id, actor_id=actor_id,
+         payload={"driver_id": str(driver.id), "mode": mode})
     record(db, organization_id=org_id, actor_id=actor_id,
            action="dispatch.assigned", resource="delivery", resource_id=str(delivery_id))
     uow.commit()
     db.refresh(assignment)
     return assignment
+
+
+def reassign(
+    uow: UnitOfWork,
+    org_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    delivery_id: uuid.UUID,
+    new_driver_id: uuid.UUID,
+    new_vehicle_id: uuid.UUID | None,
+    reason: str,
+) -> Assignment:
+    db = uow.session
+    _get_delivery(uow, org_id, delivery_id)
+
+    old = db.scalar(
+        select(Assignment).where(
+            Assignment.organization_id == org_id,
+            Assignment.delivery_id == delivery_id,
+            Assignment.status.in_(ACTIVE_STATUSES),
+        )
+    )
+    if old:
+        old.status = "rejected"
+        old.completed_at = _now()
+
+    new_driver = db.scalar(
+        select(Driver).where(Driver.id == new_driver_id, Driver.organization_id == org_id)
+    )
+    if not new_driver:
+        raise NotFoundError("driver not found")
+    if new_driver.status == "offline":
+        raise ConflictError("driver is offline")
+
+    assignment = Assignment(
+        organization_id=org_id,
+        delivery_id=delivery_id,
+        driver_id=new_driver.id,
+        vehicle_id=new_vehicle_id,
+        score=Decimal("0"),
+        mode="manual",
+        status="offered",
+        assigned_by=actor_id,
+        assigned_at=_now(),
+    )
+    db.add(assignment)
+
+    emit(db, type="delivery.reassigned", aggregate_type="delivery", aggregate_id=delivery_id,
+         organization_id=org_id, actor_id=actor_id,
+         payload={"new_driver_id": str(new_driver.id), "reason": reason})
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="dispatch.reassigned", resource="delivery", resource_id=str(delivery_id),
+           metadata={"reason": reason})
+    uow.commit()
+    db.refresh(assignment)
+    return assignment
+
+
+def unassign(
+    uow: UnitOfWork,
+    org_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    delivery_id: uuid.UUID,
+    reason: str,
+) -> int:
+    db = uow.session
+    _get_delivery(uow, org_id, delivery_id)
+
+    rows = list(
+        db.scalars(
+            select(Assignment).where(
+                Assignment.organization_id == org_id,
+                Assignment.delivery_id == delivery_id,
+                Assignment.status.in_(ACTIVE_STATUSES),
+            )
+        )
+    )
+    for a in rows:
+        a.status = "expired"
+        a.completed_at = _now()
+
+    emit(db, type="delivery.unassigned", aggregate_type="delivery", aggregate_id=delivery_id,
+         organization_id=org_id, actor_id=actor_id, payload={"reason": reason})
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="dispatch.unassigned", resource="delivery", resource_id=str(delivery_id),
+           metadata={"reason": reason})
+    uow.commit()
+    return len(rows)
 
 
 def update_assignment_status(
@@ -220,3 +339,33 @@ def list_assignments(
     if driver_id:
         q = q.where(Assignment.driver_id == driver_id)
     return list(uow.session.scalars(q.order_by(Assignment.created_at.desc())))
+
+
+def auto_dispatch_pending(uow: UnitOfWork, org_id: uuid.UUID) -> int:
+    """Find pending deliveries without active assignment, auto-assign best candidate."""
+    db = uow.session
+    pending = list(
+        db.scalars(
+            select(Delivery).where(
+                Delivery.organization_id == org_id,
+                Delivery.status == "pending",
+            )
+        )
+    )
+    assigned_count = 0
+    for d in pending:
+        existing = db.scalar(
+            select(Assignment).where(
+                Assignment.organization_id == org_id,
+                Assignment.delivery_id == d.id,
+                Assignment.status.in_(ACTIVE_STATUSES),
+            )
+        )
+        if existing:
+            continue
+        try:
+            assign(uow, org_id, None, d.id, None, None, "auto")
+            assigned_count += 1
+        except Exception:
+            continue
+    return assigned_count

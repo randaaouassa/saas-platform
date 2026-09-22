@@ -11,6 +11,8 @@ from app.modules.dispatch.schemas import (
     CandidateOut,
     RankCandidatesRequest,
     RankCandidatesResponse,
+    ReassignRequest,
+    UnassignRequest,
 )
 from app.modules.identity.deps import get_current_user, require_roles
 from app.modules.identity.models import User
@@ -26,7 +28,9 @@ def rank_candidates(
     user: User = Depends(DISPATCHER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> RankCandidatesResponse:
-    candidates = service.rank_candidates(uow, user.organization_id, user.id, payload.delivery_id)
+    candidates = service.rank_candidates(
+        uow, user.organization_id, user.id, payload.delivery_id
+    )
     return RankCandidatesResponse(
         delivery_id=payload.delivery_id,
         candidates=[CandidateOut(**c) for c in candidates],
@@ -47,6 +51,31 @@ def assign(
     return AssignmentOut.model_validate(a)
 
 
+@router.post("/reassign", response_model=AssignmentOut)
+def reassign(
+    payload: ReassignRequest,
+    user: User = Depends(DISPATCHER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> AssignmentOut:
+    a = service.reassign(
+        uow, user.organization_id, user.id,
+        payload.delivery_id, payload.new_driver_id, payload.new_vehicle_id, payload.reason,
+    )
+    return AssignmentOut.model_validate(a)
+
+
+@router.post("/unassign", response_model=dict)
+def unassign(
+    payload: UnassignRequest,
+    user: User = Depends(DISPATCHER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> dict:
+    n = service.unassign(
+        uow, user.organization_id, user.id, payload.delivery_id, payload.reason
+    )
+    return {"unassigned": n}
+
+
 @router.get("/assignments", response_model=list[AssignmentOut])
 def list_assignments(
     delivery_id: uuid.UUID | None = None,
@@ -56,7 +85,9 @@ def list_assignments(
 ) -> list[AssignmentOut]:
     return [
         AssignmentOut.model_validate(a)
-        for a in service.list_assignments(uow, user.organization_id, delivery_id, driver_id)
+        for a in service.list_assignments(
+            uow, user.organization_id, delivery_id, driver_id
+        )
     ]
 
 
@@ -68,5 +99,7 @@ def update_status(
     uow: UnitOfWork = Depends(get_uow),
 ) -> AssignmentOut:
     return AssignmentOut.model_validate(
-        service.update_assignment_status(uow, user.organization_id, user.id, assignment_id, payload.status)
+        service.update_assignment_status(
+            uow, user.organization_id, user.id, assignment_id, payload.status
+        )
     )

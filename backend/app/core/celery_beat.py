@@ -15,4 +15,8 @@ celery_app.conf.beat_schedule = {
         "task": "default.cleanup_old_domain_events",
         "schedule": crontab(hour=3, minute=30),
     },
+    "dispatch-auto-all": {
+        "task": "dispatch.auto_all",
+        "schedule": crontab(minute="*/5"),
+    },
 }
