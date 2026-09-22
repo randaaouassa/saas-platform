@@ -1,9 +1,9 @@
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { fetchMe, register } from "../../shared/api/auth";
-import { useAuthStore } from "../../shared/stores/auth";
+import { homePathForRole, useAuthStore } from "../../shared/stores/auth";
 
 export default function RegisterPage() {
     const [orgName, setOrgName] = useState("");
@@ -37,7 +37,7 @@ export default function RegisterPage() {
                 role: me.role,
                 organization_id: me.organization_id,
             });
-            navigate("/dashboard");
+            navigate(homePathForRole(me.role));
         } catch (err: any) {
             setError(err?.response?.data?.title ?? "Registration failed");
         } finally {
@@ -64,24 +64,52 @@ export default function RegisterPage() {
                 <div className="grid grid-cols-2 gap-3 mb-3">
                     <div>
                         <label className="label">Company</label>
-                        <input className="input" value={orgName} onChange={(e) => setOrgName(e.target.value)} required />
+                        <input
+                            className="input"
+                            value={orgName}
+                            onChange={(e) => setOrgName(e.target.value)}
+                            required
+                        />
                     </div>
                     <div>
                         <label className="label">Slug</label>
-                        <input className="input" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="acme" required />
+                        <input
+                            className="input"
+                            value={slug}
+                            onChange={(e) => setSlug(e.target.value)}
+                            placeholder="acme"
+                            required
+                        />
                     </div>
                 </div>
                 <div className="mb-3">
                     <label className="label">Your name</label>
-                    <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                    <input
+                        className="input"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                    />
                 </div>
                 <div className="mb-3">
                     <label className="label">Email</label>
-                    <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <input
+                        type="email"
+                        className="input"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                    />
                 </div>
                 <div className="mb-5">
                     <label className="label">Password</label>
-                    <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+                    <input
+                        type="password"
+                        className="input"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        minLength={8}
+                        required
+                    />
                 </div>
 
                 <button className="btn btn-primary w-full" disabled={loading}>

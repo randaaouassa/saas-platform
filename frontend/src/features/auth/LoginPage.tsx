@@ -1,9 +1,9 @@
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { fetchMe, login } from "../../shared/api/auth";
-import { useAuthStore } from "../../shared/stores/auth";
+import { homePathForRole, useAuthStore } from "../../shared/stores/auth";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
@@ -30,7 +30,7 @@ export default function LoginPage() {
                 role: me.role,
                 organization_id: me.organization_id,
             });
-            navigate("/dashboard");
+            navigate(homePathForRole(me.role));
         } catch (err: any) {
             setError(err?.response?.data?.title ?? "Login failed");
         } finally {
@@ -56,15 +56,33 @@ export default function LoginPage() {
 
                 <div className="mb-3">
                     <label className="label">Organization</label>
-                    <input className="input" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="acme" required />
+                    <input
+                        className="input"
+                        value={slug}
+                        onChange={(e) => setSlug(e.target.value)}
+                        placeholder="acme"
+                        required
+                    />
                 </div>
                 <div className="mb-3">
                     <label className="label">Email</label>
-                    <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <input
+                        type="email"
+                        className="input"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                    />
                 </div>
                 <div className="mb-5">
                     <label className="label">Password</label>
-                    <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                    <input
+                        type="password"
+                        className="input"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
                 </div>
 
                 <button className="btn btn-primary w-full" disabled={loading}>

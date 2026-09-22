@@ -15,7 +15,7 @@ const NAV = [
     { to: "/notifications", label: "Notifications" },
 ];
 
-export default function Layout() {
+export default function AppLayout() {
     const user = useAuthStore((s) => s.user);
     const logout = useAuthStore((s) => s.logout);
     const navigate = useNavigate();
@@ -23,15 +23,13 @@ export default function Layout() {
 
     return (
         <div className="min-h-screen flex">
-            <aside className="w-64 border-r border-white/5 p-6 flex flex-col">
-                <div className="text-lg font-semibold mb-2">
+            <aside className="w-60 border-r border-white/5 p-5 flex flex-col">
+                <div className="text-base font-semibold mb-1">
                     <span className="accent">●</span> SaaS Platform
                 </div>
                 <div className="text-xs mb-8">
                     <span
-                        className={`inline-block w-2 h-2 rounded-full mr-2 ${connected
-                                ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
-                                : "bg-red-400"
+                        className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${connected ? "bg-emerald-400" : "bg-red-400"
                             }`}
                     />
                     <span className="text-dim">{connected ? "Live" : "Offline"}</span>
@@ -45,7 +43,7 @@ export default function Layout() {
                             className={({ isActive }) =>
                                 `px-3 py-2 rounded-lg text-sm transition ${isActive
                                     ? "bg-white/5 text-white"
-                                    : "text-[color:var(--text-dim)] hover:bg-white/5 hover:text-white"
+                                    : "text-dim hover:bg-white/5 hover:text-white"
                                 }`
                             }
                         >
@@ -55,10 +53,12 @@ export default function Layout() {
                 </nav>
 
                 <div className="border-t border-white/5 pt-4 text-sm">
-                    <div className="text-white truncate">{user?.full_name || user?.email}</div>
-                    <div className="text-dim text-xs truncate">{user?.role}</div>
+                    <div className="text-white truncate text-xs">{user?.full_name || user?.email}</div>
+                    <div className="text-dim text-[10px] uppercase tracking-wider truncate mt-0.5">
+                        {user?.role}
+                    </div>
                     <button
-                        className="btn btn-ghost mt-3 w-full text-xs"
+                        className="btn btn-ghost mt-2 w-full text-xs"
                         onClick={() => {
                             logout();
                             navigate("/login");
@@ -69,7 +69,7 @@ export default function Layout() {
                 </div>
             </aside>
             <main className="flex-1 overflow-auto">
-                <div className="max-w-6xl mx-auto p-8">
+                <div className="max-w-6xl mx-auto p-7">
                     <Outlet />
                 </div>
             </main>
