@@ -23,6 +23,11 @@ class StopStatusUpdate(BaseModel):
     status: str = Field(max_length=20)
 
 
+class StopAdd(BaseModel):
+    delivery_id: uuid.UUID
+    position: int | None = Field(default=None, ge=1)
+
+
 # ---------- Route ----------
 class RouteCreate(BaseModel):
     driver_id: uuid.UUID

@@ -13,7 +13,7 @@ from app.modules.drivers.models import Driver
 from app.modules.routing.models import Route, RouteRecalculation, RouteStop
 
 DEFAULT_SPEED_KMH = 30.0
-STOP_SERVICE_SECONDS = 300  # 5 min per stop
+STOP_SERVICE_SECONDS = 300
 ROUTE_STATUSES = {"planned", "active", "completed", "cancelled"}
 STOP_STATUSES = {"pending", "arrived", "completed", "skipped", "failed"}
 
@@ -34,14 +34,11 @@ def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 def _nearest_neighbor_order(
     start: tuple[float, float] | None, points: list[tuple[float, float]]
 ) -> list[int]:
-    """Return indices of points in greedy nearest-neighbor order."""
     if not points:
         return []
     n = len(points)
     visited = [False] * n
     order: list[int] = []
-
-    # start from first if no start point
     cur = start if start else points[0]
     for _ in range(n):
         best = -1
@@ -57,6 +54,37 @@ def _nearest_neighbor_order(
         order.append(best)
         cur = points[best]
     return order
+
+
+def _recalc_totals(db, route: Route) -> None:
+    stops = sorted(route.stops, key=lambda s: s.sequence)
+    cur: tuple[float, float] | None = None
+    total_m = 0.0
+    total_s = 0.0
+    eta = _now()
+
+    for s in stops:
+        d = db.scalar(select(Delivery).where(Delivery.id == s.delivery_id))
+        if not d:
+            continue
+        coord = (
+            (d.dropoff_lat, d.dropoff_lng)
+            if d.dropoff_lat is not None and d.dropoff_lng is not None
+            else (0.0, 0.0)
+        )
+        if cur is not None:
+            leg_km = _haversine_km(cur[0], cur[1], coord[0], coord[1])
+        else:
+            leg_km = 0.0
+        leg_s = (leg_km / DEFAULT_SPEED_KMH) * 3600.0
+        total_m += leg_km * 1000.0
+        total_s += leg_s + STOP_SERVICE_SECONDS
+        eta = eta + timedelta(seconds=leg_s)
+        s.eta = eta
+        cur = coord
+
+    route.total_distance_m = Decimal(str(round(total_m, 2)))
+    route.total_duration_s = Decimal(str(round(total_s, 2)))
 
 
 def create_route(
@@ -86,7 +114,6 @@ def create_route(
             raise ConflictError(f"delivery {did} not routable in status {d.status}")
         deliveries.append(d)
 
-    # order by nearest-neighbor from first delivery's pickup or first dropoff
     start: tuple[float, float] | None = None
     for d in deliveries:
         if d.pickup_lat is not None and d.pickup_lng is not None:
@@ -112,40 +139,19 @@ def create_route(
     db.add(route)
     uow.flush()
 
-    cur = start
-    total_m = 0.0
-    total_s = 0.0
-    eta = _now()
-
     for seq, d in enumerate(ordered, start=1):
-        stop_coord = (
-            (d.dropoff_lat, d.dropoff_lng)
-            if d.dropoff_lat is not None and d.dropoff_lng is not None
-            else (0.0, 0.0)
-        )
-        if cur is not None:
-            leg_km = _haversine_km(cur[0], cur[1], stop_coord[0], stop_coord[1])
-        else:
-            leg_km = 0.0
-        leg_s = (leg_km / DEFAULT_SPEED_KMH) * 3600.0
-        total_m += leg_km * 1000.0
-        total_s += leg_s + STOP_SERVICE_SECONDS
-        eta = eta + timedelta(seconds=leg_s)
-        cur = stop_coord
-
         db.add(
             RouteStop(
                 organization_id=org_id,
                 route_id=route.id,
                 delivery_id=d.id,
                 sequence=seq,
-                eta=eta,
                 status="pending",
             )
         )
-
-    route.total_distance_m = Decimal(str(round(total_m, 2)))
-    route.total_duration_s = Decimal(str(round(total_s, 2)))
+    uow.flush()
+    db.refresh(route)
+    _recalc_totals(db, route)
 
     record(db, organization_id=org_id, actor_id=actor_id,
            action="route.created", resource="route", resource_id=str(route.id))
@@ -186,6 +192,110 @@ def update_route_status(
     return r
 
 
+def start_route(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, route_id: uuid.UUID
+) -> Route:
+    return update_route_status(uow, org_id, actor_id, route_id, "active")
+
+
+def complete_route(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, route_id: uuid.UUID
+) -> Route:
+    return update_route_status(uow, org_id, actor_id, route_id, "completed")
+
+
+def delete_route(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, route_id: uuid.UUID
+) -> None:
+    r = get_route(uow, org_id, route_id)
+    if r.status == "active":
+        raise ConflictError("cannot delete an active route")
+    record(uow.session, organization_id=org_id, actor_id=actor_id,
+           action="route.deleted", resource="route", resource_id=str(r.id))
+    uow.session.delete(r)
+    uow.commit()
+
+
+def add_stop(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    route_id: uuid.UUID, delivery_id: uuid.UUID, position: int | None = None,
+) -> Route:
+    db = uow.session
+    route = get_route(uow, org_id, route_id)
+    if route.status != "planned":
+        raise ConflictError(f"cannot add stop to route in status {route.status}")
+
+    d = db.scalar(
+        select(Delivery).where(Delivery.id == delivery_id, Delivery.organization_id == org_id)
+    )
+    if not d:
+        raise NotFoundError("delivery not found")
+
+    exists = db.scalar(
+        select(RouteStop).where(
+            RouteStop.route_id == route.id, RouteStop.delivery_id == delivery_id
+        )
+    )
+    if exists:
+        raise ConflictError("delivery already in route")
+
+    stops = sorted(route.stops, key=lambda s: s.sequence)
+    pos = position if position else len(stops) + 1
+    pos = max(1, min(pos, len(stops) + 1))
+
+    for s in stops:
+        if s.sequence >= pos:
+            s.sequence += 1
+
+    db.add(
+        RouteStop(
+            organization_id=org_id,
+            route_id=route.id,
+            delivery_id=delivery_id,
+            sequence=pos,
+            status="pending",
+        )
+    )
+    uow.flush()
+    db.refresh(route)
+    _recalc_totals(db, route)
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="route.stop_added", resource="route", resource_id=str(route.id))
+    uow.commit()
+    db.refresh(route)
+    return route
+
+
+def remove_stop(
+    uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID,
+    route_id: uuid.UUID, stop_id: uuid.UUID,
+) -> Route:
+    db = uow.session
+    route = get_route(uow, org_id, route_id)
+    if route.status != "planned":
+        raise ConflictError(f"cannot remove stop from route in status {route.status}")
+
+    stop = db.scalar(
+        select(RouteStop).where(RouteStop.id == stop_id, RouteStop.route_id == route.id)
+    )
+    if not stop:
+        raise NotFoundError("stop not found")
+
+    removed_seq = stop.sequence
+    db.delete(stop)
+    for s in route.stops:
+        if s.sequence > removed_seq:
+            s.sequence -= 1
+    uow.flush()
+    db.refresh(route)
+    _recalc_totals(db, route)
+    record(db, organization_id=org_id, actor_id=actor_id,
+           action="route.stop_removed", resource="route", resource_id=str(route.id))
+    uow.commit()
+    db.refresh(route)
+    return route
+
+
 def update_stop_status(
     uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, stop_id: uuid.UUID, status: str
 ) -> RouteStop:
@@ -221,7 +331,6 @@ def recalculate(
         ]
     }
 
-    # only reorder pending stops
     pending = [s for s in route.stops if s.status == "pending"]
     if len(pending) < 2:
         raise ConflictError("not enough pending stops to recalculate")
@@ -263,6 +372,9 @@ def recalculate(
             after_json=after,
         )
     )
+    uow.flush()
+    db.refresh(route)
+    _recalc_totals(db, route)
     record(db, organization_id=org_id, actor_id=actor_id,
            action="route.recalculated", resource="route", resource_id=str(route.id))
     uow.commit()

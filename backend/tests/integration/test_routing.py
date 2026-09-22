@@ -36,11 +36,16 @@ def _mk_delivery(client, tok, lat, lng):
     ).json()
 
 
+def _mk_driver(client, tok):
+    return client.post(
+        "/api/v1/drivers", json={"full_name": "J"}, headers=_h(tok)
+    ).json()
+
+
 def test_create_route_orders_stops(client):
     tok = _register(client)
-    d = client.post("/api/v1/drivers", json={"full_name": "J"}, headers=_h(tok)).json()
+    d = _mk_driver(client, tok)
 
-    # far first, near second — nearest-neighbor should reorder so near is first
     far = _mk_delivery(client, tok, 50.0, 50.0)
     near = _mk_delivery(client, tok, 0.1, 0.1)
 
@@ -62,7 +67,7 @@ def test_create_route_orders_stops(client):
 
 def test_route_status_flow(client):
     tok = _register(client)
-    d = client.post("/api/v1/drivers", json={"full_name": "J"}, headers=_h(tok)).json()
+    d = _mk_driver(client, tok)
     deliv = _mk_delivery(client, tok, 1.0, 1.0)
 
     route = client.post(
@@ -71,23 +76,18 @@ def test_route_status_flow(client):
         headers=_h(tok),
     ).json()
 
-    r = client.post(
-        f"/api/v1/routes/{route['id']}/status?status_value=active",
-        headers=_h(tok),
-    )
+    r = client.post(f"/api/v1/routes/{route['id']}/start", headers=_h(tok))
     assert r.status_code == 200
     assert r.json()["status"] == "active"
 
-    r2 = client.post(
-        f"/api/v1/routes/{route['id']}/status?status_value=bogus",
-        headers=_h(tok),
-    )
-    assert r2.status_code == 422
+    r2 = client.post(f"/api/v1/routes/{route['id']}/complete", headers=_h(tok))
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "completed"
 
 
 def test_stop_status_updates(client):
     tok = _register(client)
-    d = client.post("/api/v1/drivers", json={"full_name": "J"}, headers=_h(tok)).json()
+    d = _mk_driver(client, tok)
     deliv = _mk_delivery(client, tok, 1.0, 1.0)
     route = client.post(
         "/api/v1/routes",
@@ -114,9 +114,67 @@ def test_stop_status_updates(client):
     assert r2.json()["departed_at"] is not None
 
 
+def test_add_and_remove_stop(client):
+    tok = _register(client)
+    d = _mk_driver(client, tok)
+    a = _mk_delivery(client, tok, 1.0, 1.0)
+    b = _mk_delivery(client, tok, 2.0, 2.0)
+
+    route = client.post(
+        "/api/v1/routes",
+        json={"driver_id": d["id"], "date": date.today().isoformat(), "delivery_ids": [a["id"]]},
+        headers=_h(tok),
+    ).json()
+    assert len(route["stops"]) == 1
+
+    r = client.post(
+        f"/api/v1/routes/{route['id']}/stops",
+        json={"delivery_id": b["id"]},
+        headers=_h(tok),
+    )
+    assert r.status_code == 200, r.text
+    assert len(r.json()["stops"]) == 2
+
+    stop_id = [s for s in r.json()["stops"] if s["delivery_id"] == b["id"]][0]["id"]
+    r2 = client.delete(
+        f"/api/v1/routes/{route['id']}/stops/{stop_id}", headers=_h(tok)
+    )
+    assert r2.status_code == 200
+    assert len(r2.json()["stops"]) == 1
+
+
+def test_delete_route(client):
+    tok = _register(client)
+    d = _mk_driver(client, tok)
+    deliv = _mk_delivery(client, tok, 1.0, 1.0)
+    route = client.post(
+        "/api/v1/routes",
+        json={"driver_id": d["id"], "date": date.today().isoformat(), "delivery_ids": [deliv["id"]]},
+        headers=_h(tok),
+    ).json()
+
+    r = client.delete(f"/api/v1/routes/{route['id']}", headers=_h(tok))
+    assert r.status_code == 204
+
+
+def test_delete_active_route_fails(client):
+    tok = _register(client)
+    d = _mk_driver(client, tok)
+    deliv = _mk_delivery(client, tok, 1.0, 1.0)
+    route = client.post(
+        "/api/v1/routes",
+        json={"driver_id": d["id"], "date": date.today().isoformat(), "delivery_ids": [deliv["id"]]},
+        headers=_h(tok),
+    ).json()
+    client.post(f"/api/v1/routes/{route['id']}/start", headers=_h(tok))
+
+    r = client.delete(f"/api/v1/routes/{route['id']}", headers=_h(tok))
+    assert r.status_code == 409
+
+
 def test_recalculate_reorders_pending(client):
     tok = _register(client)
-    d = client.post("/api/v1/drivers", json={"full_name": "J"}, headers=_h(tok)).json()
+    d = _mk_driver(client, tok)
 
     a = _mk_delivery(client, tok, 10.0, 10.0)
     b = _mk_delivery(client, tok, 0.5, 0.5)
@@ -148,7 +206,7 @@ def test_recalculate_reorders_pending(client):
 
 def test_recalculate_needs_pending_stops(client):
     tok = _register(client)
-    d = client.post("/api/v1/drivers", json={"full_name": "J"}, headers=_h(tok)).json()
+    d = _mk_driver(client, tok)
     deliv = _mk_delivery(client, tok, 1.0, 1.0)
     route = client.post(
         "/api/v1/routes",
@@ -167,7 +225,7 @@ def test_recalculate_needs_pending_stops(client):
 def test_tenant_isolation(client):
     tok1 = _register(client)
     tok2 = _register(client)
-    d = client.post("/api/v1/drivers", json={"full_name": "J"}, headers=_h(tok1)).json()
+    d = _mk_driver(client, tok1)
     deliv = _mk_delivery(client, tok1, 1.0, 1.0)
     client.post(
         "/api/v1/routes",

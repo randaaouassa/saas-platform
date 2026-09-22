@@ -11,6 +11,7 @@ from app.modules.routing.schemas import (
     RouteOut,
     RouteRecalcRequest,
     RouteRecalculationOut,
+    StopAdd,
     StopOut,
     StopStatusUpdate,
 )
@@ -27,7 +28,8 @@ def create_route(
     uow: UnitOfWork = Depends(get_uow),
 ) -> RouteOut:
     r = service.create_route(
-        uow, user.organization_id, user.id, payload.driver_id, payload.date, payload.delivery_ids
+        uow, user.organization_id, user.id,
+        payload.driver_id, payload.date, payload.delivery_ids,
     )
     return RouteOut.model_validate(r)
 
@@ -38,7 +40,10 @@ def list_routes(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> list[RouteOut]:
-    return [RouteOut.model_validate(r) for r in service.list_routes(uow, user.organization_id, driver_id)]
+    return [
+        RouteOut.model_validate(r)
+        for r in service.list_routes(uow, user.organization_id, driver_id)
+    ]
 
 
 @router.get("/{route_id}", response_model=RouteOut)
@@ -47,18 +52,66 @@ def get_route(
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_uow),
 ) -> RouteOut:
-    return RouteOut.model_validate(service.get_route(uow, user.organization_id, route_id))
+    return RouteOut.model_validate(
+        service.get_route(uow, user.organization_id, route_id)
+    )
 
 
-@router.post("/{route_id}/status", response_model=RouteOut)
-def update_route_status(
+@router.delete("/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_route(
     route_id: uuid.UUID,
-    status_value: str,
+    user: User = Depends(DISPATCHER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> None:
+    service.delete_route(uow, user.organization_id, user.id, route_id)
+
+
+@router.post("/{route_id}/start", response_model=RouteOut)
+def start_route(
+    route_id: uuid.UUID,
     user: User = Depends(DISPATCHER),
     uow: UnitOfWork = Depends(get_uow),
 ) -> RouteOut:
     return RouteOut.model_validate(
-        service.update_route_status(uow, user.organization_id, user.id, route_id, status_value)
+        service.start_route(uow, user.organization_id, user.id, route_id)
+    )
+
+
+@router.post("/{route_id}/complete", response_model=RouteOut)
+def complete_route(
+    route_id: uuid.UUID,
+    user: User = Depends(DISPATCHER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> RouteOut:
+    return RouteOut.model_validate(
+        service.complete_route(uow, user.organization_id, user.id, route_id)
+    )
+
+
+@router.post("/{route_id}/stops", response_model=RouteOut)
+def add_stop(
+    route_id: uuid.UUID,
+    payload: StopAdd,
+    user: User = Depends(DISPATCHER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> RouteOut:
+    return RouteOut.model_validate(
+        service.add_stop(
+            uow, user.organization_id, user.id,
+            route_id, payload.delivery_id, payload.position,
+        )
+    )
+
+
+@router.delete("/{route_id}/stops/{stop_id}", response_model=RouteOut)
+def remove_stop(
+    route_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    user: User = Depends(DISPATCHER),
+    uow: UnitOfWork = Depends(get_uow),
+) -> RouteOut:
+    return RouteOut.model_validate(
+        service.remove_stop(uow, user.organization_id, user.id, route_id, stop_id)
     )
 
 
