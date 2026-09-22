@@ -2,112 +2,132 @@
 
 # SaaS Platform
 
-Multi-tenant B2B Logistics & Warehouse Management SaaS.
+Multi-tenant B2B Logistics & Warehouse Management SaaS — early build, actively developed.
 
-A single platform for organizations to manage warehouses, inventory, customer orders, delivery operations, and drivers — with real-time tracking, smart driver assignment, route optimization, and operational analytics.
+A working foundation for running warehouses, inventory, orders, deliveries, and drivers from one system, with smart dispatch, live tracking, and analytics.
 
-## Vision
+## Status
 
-Give logistics businesses one system to run their entire operation: Customer order → inventory check → pick & pack → delivery creation → driver assignment → route optimization → live tracking → proof of delivery → analytics.
+Under construction.
 
-## Core Modules
+Core loop is implemented and tested end to end (order → reserve → pick/pack → dispatch → route → track → analytics). Many production-grade features are still planned: returns, delivery time windows, real notification providers, batch tracking, deeper analytics, integrations, mobile apps, and deployment.
 
-| # | Module | Purpose |
-|---|--------|---------|
-| 1 | Auth & Organizations | Multi-tenant auth, JWT, RBAC, invitations |
-| 2 | Warehouse Management | Warehouses, zones, receiving, picking, packing, transfers |
-| 3 | Inventory | SKUs, stock, movements, reservations, alerts, history |
-| 4 | Order Management | Orders, items, lifecycle, reservation, cancellation |
-| 5 | Delivery Management | Jobs, packages, status, POD, failed handling |
-| 6 | Driver Management | Profiles, vehicles, shifts, positions, workload |
-| 7 | Smart Driver Assignment | Ranked driver matching by distance, capacity, load |
-| 8 | Route Optimization | Multi-stop sequencing, ETA, recalculation |
-| 9 | Real-Time Tracking | Live location, status, dispatcher & driver dashboards |
-| 10 | Notifications | In-app, email, delivery, assignment, low-stock |
-| 11 | Analytics | Orders, inventory, deliveries, drivers, costs |
-| 12 | System | Super-admin: tenant stats, org management |
-| 13 | Domain Events | Transactional outbox, dispatcher, auto WS publish |
+Roughly:
+- ~65% done from a portfolio-demo perspective
+- ~35% done from a production-logistics perspective
 
-## User Roles
+See docs/03-roadmap.md for the full picture.
 
-- **Super Admin** — platform operator
-- **Organization Admin** — tenant owner
-- **Warehouse Manager / Staff** — warehouse operations
-- **Dispatcher** — delivery queue + assignment
-- **Driver** — mobile-friendly delivery console
+## What works today
+
+- Multi-tenant organizations with strict data isolation
+- Auth: JWT access + rotating refresh, bcrypt, invitations, password reset
+- RBAC across 6 roles (super admin, org admin, warehouse manager/staff, dispatcher, driver)
+- Warehouses, zones, locations
+- Products, stock, movements, reservations, low-stock alerts, transfers
+- Customers, orders, order items, full lifecycle with history
+- Deliveries, packages, status, POD fields, public tracking token
+- Drivers, vehicles, shifts, positions
+- Smart driver assignment (distance + workload + vehicle capacity)
+- Route builder with nearest-neighbor ordering, ETAs, and recalculation
+- Real-time: WebSocket + Redis pub/sub + transactional outbox
+- Notifications: templates, providers (console stubs), auto-trigger from events
+- Analytics: daily rollups, ranges, avg delivery time, top products, CSV export
+- Super-admin console: tenant stats, org list, activate/suspend
+
+## What's missing
+
+Planned but not yet built — see docs/03-roadmap.md:
+
+- Returns / RMA
+- Delivery time windows and attempts
+- Barcode scanning / mobile WMS
+- Batch / lot / serial tracking
+- Purchase orders and supplier management
+- Real email / SMS / push providers
+- Customer portal
+- Multi-warehouse order splitting
+- Deeper analytics (OTIF, cost/km, utilization)
+- Real routing with live traffic
+- Integrations (Shopify, Stripe, QuickBooks, Mapbox, Twilio)
+- E2E tests (Playwright)
+- Production deployment (AWS)
 
 ## Architecture
 
-**Backend**
-- Python 3.11 · FastAPI · REST · Pydantic v2
-- SQLAlchemy 2.0 · Alembic migrations
-- Celery + Redis (async jobs, retries, DLQ, beat schedules)
-- WebSockets for live updates (Redis pub/sub fanout)
-- JWT auth (access + rotating refresh) · RBAC · tenant isolation · audit logging
-- Idempotency middleware · rate limiting · request ID propagation
-- Prometheus metrics · OpenTelemetry hooks · structured JSON logs
-
-**Database**
+Backend
+- Python 3.11 · FastAPI · Pydantic v2
+- SQLAlchemy 2.0 · Alembic
 - PostgreSQL 16
-- Relational schema, indexes, transactions
-- Organization-level row isolation (organization_id on every table)
-- Transactional outbox (domain_events) for reliable event publishing
-- Daily fact tables for analytics
+- Redis · Celery (queues, retries, DLQ, beat)
+- WebSockets (Redis pub/sub fanout)
+- JWT auth · RBAC · tenant isolation · audit log
+- Idempotency middleware · rate limiting · request IDs
+- Prometheus metrics · structured JSON logs
 
-**Frontend**
+Frontend
 - React · TypeScript · Vite · TailwindCSS v4
 - Apple-inspired dark theme, purple accent, pastel statuses
-- Role-specific layouts (admin / dispatcher / driver / warehouse)
-- React Query · WebSocket client · Zustand
-- Recharts (analytics) · Leaflet (maps) · skeleton loaders
+- Role-specific layouts: admin / dispatcher / driver / warehouse
+- React Query · Zustand · Leaflet · Recharts
+- Skeleton loaders · toasts · top progress bar
 
-**Infrastructure**
-- Docker · Docker Compose (db, redis, api, worker, beat, outbox, prometheus, grafana, frontend)
-- AWS target (ECS · RDS · ElastiCache · S3 · CloudWatch)
-- GitHub Actions CI (lint → audit → migrate → tests → build)
+Infrastructure
+- Docker Compose (db, redis, api, worker, beat, outbox, prometheus, grafana, frontend)
+- GitHub Actions CI: lint → audit → migrations → tests (139 passing) → frontend build
 
-## Engineering Principles
+## Engineering highlights
 
-- **Modular** — each domain is a self-contained module
-- **Scalable** — stateless services, horizontal scaling, async workloads
-- **Secure** — least privilege, validated input, rate limiting, audit trail
-- **Observable** — structured logs, metrics, tracing, health checks
-- **Tested** — unit, integration, API, auth tests in CI (139 passing)
-- **Extensible** — new tenants, warehouses, drivers, orders need no redesign
+- Modular — one bounded context per module
+- Transactional outbox — reliable domain events, at-least-once
+- Unit of Work — one transaction per request, injected
+- Multi-tenant by default — organization_id on every row
+- Tested — unit + integration through real HTTP + real Postgres
+- Documented — architecture, ERD, ADRs, threat model, runbook, and more
 
-## Repository Layout
+## Docs
 
-- backend/ — FastAPI app, modules, migrations, tests
-- frontend/ — React app
-- infra/ — Observability configs, deployment
-- docs/ — Architecture, ERD, roadmap, ADRs, threat model
+- docs/01-architecture.md — system design
+- docs/02-erd.md — database model
+- docs/03-roadmap.md — phased plan
+- docs/04-backend.md — module reference
+- docs/05-frontend.md — React guide
+- docs/06-ui-ux.md — design system
+- docs/07-api.md — REST catalog
+- docs/08-testing.md — test strategy
+- docs/09-observability.md — logs, metrics, tracing
+- docs/10-runbook.md — on-call playbook
+- docs/11-deployment.md — local + AWS
+- docs/12-onboarding.md — day-1 guide
+- docs/13-glossary.md — terms
+- docs/14-changelog.md — releases
+- docs/15-contributing.md — how to contribute
+- docs/adr/ — architecture decisions
 
-## Quick Start
+## Quick start
 
-- cp .env.example .env
-- docker compose up -d --build
-- docker compose exec api alembic upgrade head
+cp .env.example .env
+docker compose up -d --build
+docker compose exec api alembic upgrade head
 
-Endpoints:
 - API: http://localhost:8000
 - Docs: http://localhost:8000/docs
 - Frontend: http://localhost:5173
 - Grafana: http://localhost:3000
 
-Super admin (if SUPER_ADMIN_EMAIL + SUPER_ADMIN_PASSWORD set in .env):
+Super admin (if SUPER_ADMIN_EMAIL + SUPER_ADMIN_PASSWORD are set in .env):
 - Org: platform
-- Login with the configured email/password
 
 ## Tests
 
 docker compose exec api pytest -q
 
-139 passing · 86% coverage · CI runs on every push.
+139 tests · 86% coverage · CI runs on every push.
 
 ## Roadmap
 
 See docs/03-roadmap.md.
 
-## Status
+## License
 
-Backend complete. Frontend core complete. Deployment + polish in progress.
+Proprietary. Public for portfolio review only. No part may be copied, used, modified, or redistributed without written permission.
