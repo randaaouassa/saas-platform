@@ -20,25 +20,14 @@ def _h(tok):
     return {"Authorization": f"Bearer {tok}"}
 
 
-def _invite_and_get_token(client, tok, email, role_name):
-    from app.core.db import SessionLocal
-    from app.core.uow import UnitOfWork
-    from app.modules.identity import service as id_service
-    from app.modules.identity.schemas import InviteRequest
-
-    me = client.get("/api/v1/auth/me", headers=_h(tok)).json()
-    session = SessionLocal()
-    try:
-        uow = UnitOfWork(session)
-        _inv, token = id_service.invite_user(
-            uow,
-            uuid.UUID(me["organization_id"]),
-            uuid.UUID(me["id"]),
-            InviteRequest(email=email, role_name=role_name),
-        )
-    finally:
-        session.close()
-    return token
+def _invite_token(client, tok, email, role_name):
+    r = client.post(
+        "/api/v1/auth/invitations",
+        json={"email": email, "role_name": role_name},
+        headers=_h(tok),
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["token"]
 
 
 def test_list_users_and_roles(client):
@@ -56,14 +45,14 @@ def test_list_users_and_roles(client):
 
 def test_accept_invite(client):
     tok, _ = _register(client)
-    token = _invite_and_get_token(client, tok, "driver@test.com", "driver")
+    token = _invite_token(client, tok, "driver@test.com", "driver")
 
     r = client.post(
         "/api/v1/auth/invitations/accept",
         json={"token": token, "password": "password123", "full_name": "Driver"},
     )
     assert r.status_code == 201, r.text
-    assert r.json()["email"] == "driver@test.com"
+    assert "access_token" in r.json()
 
 
 def test_forgot_and_reset_password(client):
@@ -93,15 +82,18 @@ def test_forgot_and_reset_password(client):
 
 def test_deactivate_user(client):
     tok, _ = _register(client)
-    token = _invite_and_get_token(client, tok, "staff@test.com", "warehouse_staff")
+    token = _invite_token(client, tok, "staff@test.com", "warehouse_staff")
 
     r = client.post(
         "/api/v1/auth/invitations/accept",
         json={"token": token, "password": "password123", "full_name": "Staff"},
     )
-    new_user_id = r.json()["id"]
+    assert r.status_code == 201, r.text
 
-    r2 = client.post(f"/api/v1/users/{new_user_id}/deactivate", headers=_h(tok))
+    users = client.get("/api/v1/users", headers=_h(tok)).json()
+    new_user = [u for u in users if u["email"] == "staff@test.com"][0]
+
+    r2 = client.post(f"/api/v1/users/{new_user['id']}/deactivate", headers=_h(tok))
     assert r2.status_code == 200
     assert r2.json()["is_active"] is False
 
@@ -125,6 +117,5 @@ def test_assign_and_revoke_role(client):
 
 def test_driver_me_endpoint(client):
     tok, _ = _register(client)
-    # no driver linked yet → 404
     r = client.get("/api/v1/drivers/me", headers=_h(tok))
     assert r.status_code == 404
