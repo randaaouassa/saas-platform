@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
+import StatusBadge from "../../shared/components/StatusBadge";
 
 interface Customer {
     id: string;
@@ -33,16 +35,6 @@ interface Order {
     items: { id: string; product_id: string; quantity: string }[];
 }
 
-const NEXT_ACTIONS: Record<string, string[]> = {
-    draft: ["confirmed", "cancelled"],
-    confirmed: ["reserved", "cancelled"],
-    reserved: ["picking", "cancelled"],
-    picking: ["packed", "cancelled"],
-    packed: ["ready_for_dispatch", "cancelled"],
-    ready_for_dispatch: ["dispatched", "cancelled"],
-    dispatched: ["delivered"],
-};
-
 export default function OrdersPage() {
     const qc = useQueryClient();
     const [tab, setTab] = useState<"orders" | "customers">("orders");
@@ -51,10 +43,16 @@ export default function OrdersPage() {
         <div>
             <h1 className="text-3xl font-semibold mb-6">Orders</h1>
             <div className="flex gap-2 mb-6">
-                <button className={`btn ${tab === "orders" ? "btn-primary" : "btn-ghost"}`} onClick={() => setTab("orders")}>
+                <button
+                    className={`btn ${tab === "orders" ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => setTab("orders")}
+                >
                     Orders
                 </button>
-                <button className={`btn ${tab === "customers" ? "btn-primary" : "btn-ghost"}`} onClick={() => setTab("customers")}>
+                <button
+                    className={`btn ${tab === "customers" ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => setTab("customers")}
+                >
                     Customers
                 </button>
             </div>
@@ -138,24 +136,26 @@ function CustomersTab({ qc }: { qc: any }) {
                 </form>
             )}
             <div className="glass overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="text-dim text-xs uppercase tracking-widest">
+                <table className="table">
+                    <thead>
                         <tr>
-                            <th className="text-left px-4 py-3">Name</th>
-                            <th className="text-left px-4 py-3">Email</th>
-                            <th className="text-left px-4 py-3">Address</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Address</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data?.map((c) => (
-                            <tr key={c.id} className="border-t border-white/5">
-                                <td className="px-4 py-3">{c.name}</td>
-                                <td className="px-4 py-3 text-dim">{c.email || "—"}</td>
-                                <td className="px-4 py-3 text-dim">{c.address || "—"}</td>
+                            <tr key={c.id}>
+                                <td>{c.name}</td>
+                                <td className="text-dim">{c.email || "—"}</td>
+                                <td className="text-dim">{c.address || "—"}</td>
                             </tr>
                         ))}
                         {(!data || data.length === 0) && !isLoading && (
-                            <tr><td colSpan={3} className="px-4 py-8 text-center text-dim">No customers yet.</td></tr>
+                            <tr>
+                                <td colSpan={3} className="text-center text-dim py-8">No customers yet.</td>
+                            </tr>
                         )}
                     </tbody>
                 </table>
@@ -166,6 +166,7 @@ function CustomersTab({ qc }: { qc: any }) {
 
 function OrdersTab({ qc }: { qc: any }) {
     const [showForm, setShowForm] = useState(false);
+    const navigate = useNavigate();
 
     const orders = useQuery({
         queryKey: ["orders"],
@@ -181,85 +182,39 @@ function OrdersTab({ qc }: { qc: any }) {
             </div>
             {showForm && <NewOrderForm qc={qc} onDone={() => setShowForm(false)} />}
             <div className="glass overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="text-dim text-xs uppercase tracking-widest">
+                <table className="table">
+                    <thead>
                         <tr>
-                            <th className="text-left px-4 py-3">Number</th>
-                            <th className="text-left px-4 py-3">Status</th>
-                            <th className="text-right px-4 py-3">Total</th>
-                            <th className="text-left px-4 py-3">Items</th>
-                            <th className="text-right px-4 py-3">Actions</th>
+                            <th>Number</th>
+                            <th>Status</th>
+                            <th className="text-right">Total</th>
+                            <th className="text-right">Items</th>
                         </tr>
                     </thead>
                     <tbody>
                         {orders.data?.map((o) => (
-                            <OrderRow key={o.id} order={o} qc={qc} />
+                            <tr
+                                key={o.id}
+                                className="cursor-pointer"
+                                onClick={() => navigate(`/orders/${o.id}`)}
+                            >
+                                <td className="font-mono text-xs">{o.number}</td>
+                                <td><StatusBadge domain="order" value={o.status} /></td>
+                                <td className="text-right">
+                                    {o.currency} {Number(o.total_amount).toFixed(2)}
+                                </td>
+                                <td className="text-right text-dim">{o.items.length}</td>
+                            </tr>
                         ))}
                         {(!orders.data || orders.data.length === 0) && !orders.isLoading && (
-                            <tr><td colSpan={5} className="px-4 py-8 text-center text-dim">No orders yet.</td></tr>
+                            <tr>
+                                <td colSpan={4} className="text-center text-dim py-8">No orders yet.</td>
+                            </tr>
                         )}
                     </tbody>
                 </table>
             </div>
         </>
-    );
-}
-
-function OrderRow({ order, qc }: { order: Order; qc: any }) {
-    const [warehouseId, setWarehouseId] = useState<string>("");
-
-    const warehouses = useQuery({
-        queryKey: ["warehouses"],
-        queryFn: async () => (await api.get<Warehouse[]>("/warehouses")).data,
-    });
-
-    const transition = useMutation({
-        mutationFn: async (target: string) => {
-            const url = `/orders/${order.id}/status${target === "reserved" && warehouseId ? `?warehouse_id=${warehouseId}` : ""}`;
-            await api.post(url, { status: target });
-        },
-        onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
-    });
-
-    const actions = NEXT_ACTIONS[order.status] ?? [];
-
-    return (
-        <tr className="border-t border-white/5">
-            <td className="px-4 py-3 font-mono">{order.number}</td>
-            <td className="px-4 py-3">
-                <span className="text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200">
-                    {order.status}
-                </span>
-            </td>
-            <td className="px-4 py-3 text-right">
-                {order.currency} {Number(order.total_amount).toFixed(2)}
-            </td>
-            <td className="px-4 py-3 text-dim">{order.items.length}</td>
-            <td className="px-4 py-3 text-right space-x-2">
-                {order.status === "confirmed" && (
-                    <select
-                        className="input !w-auto !py-1 !px-2 text-xs inline-block"
-                        value={warehouseId}
-                        onChange={(e) => setWarehouseId(e.target.value)}
-                    >
-                        <option value="">Warehouse…</option>
-                        {warehouses.data?.map((w) => (
-                            <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
-                    </select>
-                )}
-                {actions.map((a) => (
-                    <button
-                        key={a}
-                        className="btn btn-ghost !py-1 !px-3 text-xs"
-                        disabled={transition.isPending || (a === "reserved" && !warehouseId)}
-                        onClick={() => transition.mutate(a)}
-                    >
-                        → {a}
-                    </button>
-                ))}
-            </td>
-        </tr>
     );
 }
 

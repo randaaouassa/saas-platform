@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
+import StatusBadge from "../../shared/components/StatusBadge";
 
 interface Delivery {
     id: string;
@@ -14,17 +16,9 @@ interface Delivery {
     delivered_at: string | null;
 }
 
-const NEXT: Record<string, string[]> = {
-    pending: ["assigned", "cancelled"],
-    assigned: ["picked_up", "cancelled"],
-    picked_up: ["in_transit", "failed"],
-    in_transit: ["delivered", "failed"],
-    failed: ["rescheduled", "returned"],
-    rescheduled: ["assigned", "cancelled"],
-};
-
 export default function DeliveriesPage() {
     const qc = useQueryClient();
+    const navigate = useNavigate();
     const [showForm, setShowForm] = useState(false);
     const [dropoff, setDropoff] = useState("");
     const [lat, setLat] = useState("");
@@ -53,25 +47,9 @@ export default function DeliveriesPage() {
         },
     });
 
-    const transition = useMutation({
-        mutationFn: async ({ id, status, reason }: { id: string; status: string; reason?: string }) => {
-            await api.post(`/deliveries/${id}/status`, { status, failed_reason: reason });
-        },
-        onSuccess: () => qc.invalidateQueries({ queryKey: ["deliveries"] }),
-    });
-
     function onSubmit(e: FormEvent) {
         e.preventDefault();
         create.mutate();
-    }
-
-    function advance(d: Delivery, target: string) {
-        let reason: string | undefined;
-        if (target === "failed") {
-            reason = window.prompt("Reason for failure?") ?? undefined;
-            if (!reason) return;
-        }
-        transition.mutate({ id: d.id, status: target, reason });
     }
 
     return (
@@ -104,43 +82,34 @@ export default function DeliveriesPage() {
             )}
 
             <div className="glass overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="text-dim text-xs uppercase tracking-widest">
+                <table className="table">
+                    <thead>
                         <tr>
-                            <th className="text-left px-4 py-3">Dropoff</th>
-                            <th className="text-left px-4 py-3">Status</th>
-                            <th className="text-left px-4 py-3">Coords</th>
-                            <th className="text-right px-4 py-3">Actions</th>
+                            <th>Dropoff</th>
+                            <th>Status</th>
+                            <th>Coords</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data?.map((d) => (
-                            <tr key={d.id} className="border-t border-white/5">
-                                <td className="px-4 py-3">{d.dropoff_location}</td>
-                                <td className="px-4 py-3">
-                                    <span className="text-xs px-2 py-1 rounded-full bg-purple-500/15 text-purple-200">
-                                        {d.status}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3 text-dim text-xs font-mono">
-                                    {d.dropoff_lat != null ? `${d.dropoff_lat.toFixed(3)}, ${d.dropoff_lng?.toFixed(3)}` : "—"}
-                                </td>
-                                <td className="px-4 py-3 text-right space-x-2">
-                                    {(NEXT[d.status] ?? []).map((a) => (
-                                        <button
-                                            key={a}
-                                            className="btn btn-ghost !py-1 !px-3 text-xs"
-                                            onClick={() => advance(d, a)}
-                                            disabled={transition.isPending}
-                                        >
-                                            → {a}
-                                        </button>
-                                    ))}
+                            <tr
+                                key={d.id}
+                                className="cursor-pointer"
+                                onClick={() => navigate(`/deliveries/${d.id}`)}
+                            >
+                                <td>{d.dropoff_location}</td>
+                                <td><StatusBadge domain="delivery" value={d.status} /></td>
+                                <td className="text-dim text-xs font-mono">
+                                    {d.dropoff_lat != null
+                                        ? `${d.dropoff_lat.toFixed(3)}, ${d.dropoff_lng?.toFixed(3)}`
+                                        : "—"}
                                 </td>
                             </tr>
                         ))}
                         {(!data || data.length === 0) && (
-                            <tr><td colSpan={4} className="px-4 py-8 text-center text-dim">No deliveries yet.</td></tr>
+                            <tr>
+                                <td colSpan={3} className="text-center text-dim py-8">No deliveries yet.</td>
+                            </tr>
                         )}
                     </tbody>
                 </table>

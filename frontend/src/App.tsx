@@ -11,13 +11,16 @@ import AcceptInvitePage from "./features/auth/AcceptInvitePage";
 import LoginPage from "./features/auth/LoginPage";
 import RegisterPage from "./features/auth/RegisterPage";
 import DeliveriesPage from "./features/deliveries/DeliveriesPage";
+import DeliveryDetailPage from "./features/deliveries/DeliveryDetailPage";
 import DispatchPage from "./features/dispatch/DispatchPage";
 import DispatcherHome from "./features/dispatcher/DispatcherHome";
 import DriverHome from "./features/driver/DriverHome";
+import DriverDetailPage from "./features/drivers/DriverDetailPage";
 import DriversPage from "./features/drivers/DriversPage";
 import InventoryPage from "./features/inventory/InventoryPage";
 import LandingPage from "./features/landing/LandingPage";
 import NotificationsPage from "./features/notifications/NotificationsPage";
+import OrderDetailPage from "./features/orders/OrderDetailPage";
 import OrdersPage from "./features/orders/OrdersPage";
 import RoutingPage from "./features/routing/RoutingPage";
 import SettingsPage from "./features/settings/SettingsPage";
@@ -46,8 +49,11 @@ export default function App() {
         <Route path="/warehouses" element={<WarehousesPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/deliveries" element={<DeliveriesPage />} />
+        <Route path="/deliveries/:id" element={<DeliveryDetailPage />} />
         <Route path="/drivers" element={<DriversPage />} />
+        <Route path="/drivers/:id" element={<DriverDetailPage />} />
         <Route path="/dispatch" element={<DispatchPage />} />
         <Route path="/routing" element={<RoutingPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
@@ -66,7 +72,9 @@ export default function App() {
         <Route path="/dispatcher/dispatch" element={<DispatchPage />} />
         <Route path="/dispatcher/routing" element={<RoutingPage />} />
         <Route path="/dispatcher/drivers" element={<DriversPage />} />
+        <Route path="/dispatcher/drivers/:id" element={<DriverDetailPage />} />
         <Route path="/dispatcher/deliveries" element={<DeliveriesPage />} />
+        <Route path="/dispatcher/deliveries/:id" element={<DeliveryDetailPage />} />
         <Route path="/dispatcher/notifications" element={<NotificationsPage />} />
       </Route>
 
@@ -78,6 +86,7 @@ export default function App() {
         }
       >
         <Route path="/driver" element={<DriverHome />} />
+        <Route path="/driver/deliveries/:id" element={<DeliveryDetailPage />} />
         <Route path="/driver/notifications" element={<NotificationsPage />} />
       </Route>
 
@@ -92,7 +101,9 @@ export default function App() {
         <Route path="/warehouse/warehouses" element={<WarehousesPage />} />
         <Route path="/warehouse/inventory" element={<InventoryPage />} />
         <Route path="/warehouse/orders" element={<OrdersPage />} />
+        <Route path="/warehouse/orders/:id" element={<OrderDetailPage />} />
         <Route path="/warehouse/deliveries" element={<DeliveriesPage />} />
+        <Route path="/warehouse/deliveries/:id" element={<DeliveryDetailPage />} />
         <Route path="/warehouse/notifications" element={<NotificationsPage />} />
       </Route>
 

@@ -238,6 +238,26 @@ def validate_invite(uow: UnitOfWork, token: str) -> dict:
     }
 
 
+def _ensure_driver_profile(db, org_id: uuid.UUID, user: User) -> None:
+    from app.modules.drivers.models import Driver
+
+    existing = db.scalar(
+        select(Driver).where(
+            Driver.organization_id == org_id, Driver.user_id == user.id
+        )
+    )
+    if existing:
+        return
+    db.add(
+        Driver(
+            organization_id=org_id,
+            user_id=user.id,
+            full_name=user.full_name or user.email,
+            status="offline",
+        )
+    )
+
+
 def accept_invite(uow: UnitOfWork, payload: AcceptInviteRequest) -> tuple[User, dict]:
     db = uow.session
     token_hash = _hash_token(payload.token)
@@ -260,6 +280,11 @@ def accept_invite(uow: UnitOfWork, payload: AcceptInviteRequest) -> tuple[User, 
     db.add(user)
     uow.flush()
     db.add(UserRole(user_id=user.id, role_id=inv.role_id))
+
+    role = db.get(Role, inv.role_id)
+    if role and role.name == "driver":
+        _ensure_driver_profile(db, inv.organization_id, user)
+
     inv.accepted_at = _now()
     record(db, organization_id=inv.organization_id, actor_id=user.id,
            action="user.joined", resource="user", resource_id=str(user.id))
@@ -343,6 +368,8 @@ def assign_role(
         raise ConflictError("user already has this role")
 
     db.add(UserRole(user_id=user.id, role_id=role.id))
+    if role.name == "driver":
+        _ensure_driver_profile(db, org_id, user)
     record(db, organization_id=org_id, actor_id=actor_id,
            action="user.role_assigned", resource="user", resource_id=str(user.id),
            metadata={"role": role_name})
