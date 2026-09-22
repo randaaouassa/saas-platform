@@ -288,3 +288,12 @@ select.input {
     transform: none;
   }
 }
+
+select.input option {
+  background-color: #131316;
+  color: #f5f5f7;
+}
+
+select.input {
+  color-scheme: dark;
+}

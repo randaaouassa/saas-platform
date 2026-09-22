@@ -5,6 +5,7 @@ import { primaryRole, useAuthStore } from "../shared/stores/auth";
 
 const NAV = [
     { to: "/dashboard", label: "Dashboard" },
+    { to: "/analytics", label: "Analytics" },
     { to: "/warehouses", label: "Warehouses" },
     { to: "/inventory", label: "Inventory" },
     { to: "/orders", label: "Orders" },

@@ -6,6 +6,7 @@ import DriverLayout from "./app/DriverLayout";
 import ProtectedRoute from "./app/ProtectedRoute";
 import RoleRedirect from "./app/RoleRedirect";
 import WarehouseLayout from "./app/WarehouseLayout";
+import AnalyticsPage from "./features/analytics/AnalyticsPage";
 import DashboardPage from "./features/analytics/DashboardPage";
 import AcceptInvitePage from "./features/auth/AcceptInvitePage";
 import LoginPage from "./features/auth/LoginPage";
@@ -46,6 +47,7 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/warehouses" element={<WarehousesPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/orders" element={<OrdersPage />} />
