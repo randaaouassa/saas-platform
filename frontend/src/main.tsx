@@ -5,6 +5,8 @@ import { BrowserRouter } from "react-router-dom";
 
 import App from "./App";
 import "./index.css";
+import Toaster from "./shared/components/Toaster";
+import TopProgressBar from "./shared/components/TopProgressBar";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -14,6 +16,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <TopProgressBar />
+        <Toaster />
         <App />
       </BrowserRouter>
     </QueryClientProvider>

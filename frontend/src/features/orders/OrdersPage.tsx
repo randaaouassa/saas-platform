@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
+import { SkeletonTable } from "../../shared/components/Skeleton";
 import StatusBadge from "../../shared/components/StatusBadge";
 
 interface Customer {
@@ -38,6 +39,8 @@ interface Order {
 export default function OrdersPage() {
     const qc = useQueryClient();
     const [tab, setTab] = useState<"orders" | "customers">("orders");
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
 
     return (
         <div>
@@ -56,7 +59,17 @@ export default function OrdersPage() {
                     Customers
                 </button>
             </div>
-            {tab === "orders" ? <OrdersTab qc={qc} /> : <CustomersTab qc={qc} />}
+            {tab === "orders" ? (
+                <OrdersTab
+                    qc={qc}
+                    search={search}
+                    setSearch={setSearch}
+                    statusFilter={statusFilter}
+                    setStatusFilter={setStatusFilter}
+                />
+            ) : (
+                <CustomersTab qc={qc} />
+            )}
         </div>
     );
 }
@@ -135,36 +148,60 @@ function CustomersTab({ qc }: { qc: any }) {
                     </div>
                 </form>
             )}
-            <div className="glass overflow-hidden">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Address</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data?.map((c) => (
-                            <tr key={c.id}>
-                                <td>{c.name}</td>
-                                <td className="text-dim">{c.email || "—"}</td>
-                                <td className="text-dim">{c.address || "—"}</td>
-                            </tr>
-                        ))}
-                        {(!data || data.length === 0) && !isLoading && (
+            {isLoading ? (
+                <SkeletonTable rows={5} cols={3} />
+            ) : (
+                <div className="glass overflow-hidden">
+                    <table className="table">
+                        <thead>
                             <tr>
-                                <td colSpan={3} className="text-center text-dim py-8">No customers yet.</td>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Address</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {data?.map((c) => (
+                                <tr key={c.id}>
+                                    <td>{c.name}</td>
+                                    <td className="text-dim">{c.email || "—"}</td>
+                                    <td className="text-dim">{c.address || "—"}</td>
+                                </tr>
+                            ))}
+                            {(!data || data.length === 0) && (
+                                <tr>
+                                    <td colSpan={3} className="text-center py-10">
+                                        <div className="text-dim text-sm">No customers yet.</div>
+                                        <button
+                                            className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                            onClick={() => setShowForm(true)}
+                                        >
+                                            Add your first customer
+                                        </button>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </>
     );
 }
 
-function OrdersTab({ qc }: { qc: any }) {
+function OrdersTab({
+    qc,
+    search,
+    setSearch,
+    statusFilter,
+    setStatusFilter,
+}: {
+    qc: any;
+    search: string;
+    setSearch: (v: string) => void;
+    statusFilter: string;
+    setStatusFilter: (v: string) => void;
+}) {
     const [showForm, setShowForm] = useState(false);
     const navigate = useNavigate();
 
@@ -173,47 +210,101 @@ function OrdersTab({ qc }: { qc: any }) {
         queryFn: async () => (await api.get<Order[]>("/orders")).data,
     });
 
+    const filtered = (orders.data ?? []).filter((o) => {
+        if (statusFilter && o.status !== statusFilter) return false;
+        if (search && !o.number.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+    });
+
     return (
         <>
-            <div className="flex justify-end mb-4">
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                <div className="flex gap-2 flex-wrap">
+                    <input
+                        className="input !w-64"
+                        placeholder="Search by number…"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                    <select
+                        className="input !w-40"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                        <option value="">All statuses</option>
+                        {[
+                            "draft",
+                            "confirmed",
+                            "reserved",
+                            "picking",
+                            "packed",
+                            "ready_for_dispatch",
+                            "dispatched",
+                            "delivered",
+                            "cancelled",
+                        ].map((s) => (
+                            <option key={s} value={s}>
+                                {s.replace(/_/g, " ")}
+                            </option>
+                        ))}
+                    </select>
+                </div>
                 <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
                     {showForm ? "Cancel" : "New order"}
                 </button>
             </div>
             {showForm && <NewOrderForm qc={qc} onDone={() => setShowForm(false)} />}
-            <div className="glass overflow-hidden">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Number</th>
-                            <th>Status</th>
-                            <th className="text-right">Total</th>
-                            <th className="text-right">Items</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {orders.data?.map((o) => (
-                            <tr
-                                key={o.id}
-                                className="cursor-pointer"
-                                onClick={() => navigate(`/orders/${o.id}`)}
-                            >
-                                <td className="font-mono text-xs">{o.number}</td>
-                                <td><StatusBadge domain="order" value={o.status} /></td>
-                                <td className="text-right">
-                                    {o.currency} {Number(o.total_amount).toFixed(2)}
-                                </td>
-                                <td className="text-right text-dim">{o.items.length}</td>
-                            </tr>
-                        ))}
-                        {(!orders.data || orders.data.length === 0) && !orders.isLoading && (
+            {orders.isLoading ? (
+                <SkeletonTable rows={6} cols={4} />
+            ) : (
+                <div className="glass overflow-hidden">
+                    <table className="table">
+                        <thead>
                             <tr>
-                                <td colSpan={4} className="text-center text-dim py-8">No orders yet.</td>
+                                <th>Number</th>
+                                <th>Status</th>
+                                <th className="text-right">Total</th>
+                                <th className="text-right">Items</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {filtered.map((o) => (
+                                <tr
+                                    key={o.id}
+                                    className="cursor-pointer"
+                                    onClick={() => navigate(`/orders/${o.id}`)}
+                                >
+                                    <td className="font-mono text-xs">{o.number}</td>
+                                    <td><StatusBadge domain="order" value={o.status} /></td>
+                                    <td className="text-right">
+                                        {o.currency} {Number(o.total_amount).toFixed(2)}
+                                    </td>
+                                    <td className="text-right text-dim">{o.items.length}</td>
+                                </tr>
+                            ))}
+                            {filtered.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="text-center py-10">
+                                        {orders.data?.length === 0 ? (
+                                            <>
+                                                <div className="text-dim text-sm">No orders yet.</div>
+                                                <button
+                                                    className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                                    onClick={() => setShowForm(true)}
+                                                >
+                                                    Create your first order
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="text-dim text-sm">No matches.</div>
+                                        )}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </>
     );
 }

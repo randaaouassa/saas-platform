@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
 
 import { api } from "../../shared/api/client";
+import { SkeletonTable } from "../../shared/components/Skeleton";
 
 interface Product {
     id: string;
@@ -30,43 +31,41 @@ interface Stock {
 export default function InventoryPage() {
     const qc = useQueryClient();
     const [tab, setTab] = useState<"products" | "stock">("products");
+    const [search, setSearch] = useState("");
 
     return (
         <div>
             <h1 className="text-3xl font-semibold mb-6">Inventory</h1>
-            <div className="flex gap-2 mb-6">
-                <Tab active={tab === "products"} onClick={() => setTab("products")}>
+            <div className="flex gap-2 mb-6 items-center">
+                <button
+                    className={`btn ${tab === "products" ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => setTab("products")}
+                >
                     Products
-                </Tab>
-                <Tab active={tab === "stock"} onClick={() => setTab("stock")}>
+                </button>
+                <button
+                    className={`btn ${tab === "stock" ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => setTab("stock")}
+                >
                     Stock
-                </Tab>
+                </button>
+                <input
+                    className="input !w-64 ml-2"
+                    placeholder="Search…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
             </div>
-            {tab === "products" ? <ProductsTab qc={qc} /> : <StockTab qc={qc} />}
+            {tab === "products" ? (
+                <ProductsTab qc={qc} search={search} />
+            ) : (
+                <StockTab qc={qc} search={search} />
+            )}
         </div>
     );
 }
 
-function Tab({
-    active,
-    onClick,
-    children,
-}: {
-    active: boolean;
-    onClick: () => void;
-    children: React.ReactNode;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            className={`btn ${active ? "btn-primary" : "btn-ghost"}`}
-        >
-            {children}
-        </button>
-    );
-}
-
-function ProductsTab({ qc }: { qc: any }) {
+function ProductsTab({ qc, search }: { qc: any; search: string }) {
     const [showForm, setShowForm] = useState(false);
     const [sku, setSku] = useState("");
     const [name, setName] = useState("");
@@ -74,10 +73,7 @@ function ProductsTab({ qc }: { qc: any }) {
 
     const { data, isLoading } = useQuery({
         queryKey: ["products"],
-        queryFn: async () => {
-            const { data } = await api.get<Product[]>("/inventory/products");
-            return data;
-        },
+        queryFn: async () => (await api.get<Product[]>("/inventory/products")).data,
     });
 
     const create = useMutation({
@@ -97,6 +93,12 @@ function ProductsTab({ qc }: { qc: any }) {
         e.preventDefault();
         create.mutate();
     }
+
+    const filtered = (data ?? []).filter((p) => {
+        if (!search) return true;
+        const s = search.toLowerCase();
+        return p.sku.toLowerCase().includes(s) || p.name.toLowerCase().includes(s);
+    });
 
     return (
         <>
@@ -129,35 +131,52 @@ function ProductsTab({ qc }: { qc: any }) {
             )}
 
             {isLoading ? (
-                <div className="text-dim">Loading…</div>
+                <SkeletonTable rows={6} cols={4} />
             ) : (
                 <div className="glass overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="text-dim text-xs uppercase tracking-widest">
+                    <table className="table">
+                        <thead>
                             <tr>
-                                <th className="text-left px-4 py-3">SKU</th>
-                                <th className="text-left px-4 py-3">Name</th>
-                                <th className="text-left px-4 py-3">Unit</th>
-                                <th className="text-left px-4 py-3">Status</th>
+                                <th>SKU</th>
+                                <th>Name</th>
+                                <th>Unit</th>
+                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {data?.map((p) => (
-                                <tr key={p.id} className="border-t border-white/5">
-                                    <td className="px-4 py-3 font-mono">{p.sku}</td>
-                                    <td className="px-4 py-3">{p.name}</td>
-                                    <td className="px-4 py-3 text-dim">{p.unit}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`text-xs px-2 py-1 rounded-full ${p.is_active ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-dim"}`}>
+                            {filtered.map((p) => (
+                                <tr key={p.id}>
+                                    <td className="font-mono text-xs">{p.sku}</td>
+                                    <td>{p.name}</td>
+                                    <td className="text-dim">{p.unit}</td>
+                                    <td>
+                                        <span
+                                            className={`text-xs px-2 py-1 rounded-full ${p.is_active
+                                                    ? "bg-emerald-500/15 text-emerald-300"
+                                                    : "bg-white/5 text-dim"
+                                                }`}
+                                        >
                                             {p.is_active ? "Active" : "Inactive"}
                                         </span>
                                     </td>
                                 </tr>
                             ))}
-                            {(!data || data.length === 0) && (
+                            {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-4 py-8 text-center text-dim">
-                                        No products yet.
+                                    <td colSpan={4} className="text-center py-10">
+                                        {data?.length === 0 ? (
+                                            <>
+                                                <div className="text-dim text-sm">No products yet.</div>
+                                                <button
+                                                    className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                                    onClick={() => setShowForm(true)}
+                                                >
+                                                    Create your first product
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="text-dim text-sm">No matches.</div>
+                                        )}
                                     </td>
                                 </tr>
                             )}
@@ -169,7 +188,7 @@ function ProductsTab({ qc }: { qc: any }) {
     );
 }
 
-function StockTab({ qc }: { qc: any }) {
+function StockTab({ qc, search }: { qc: any; search: string }) {
     const [showForm, setShowForm] = useState(false);
     const [productId, setProductId] = useState("");
     const [warehouseId, setWarehouseId] = useState("");
@@ -177,26 +196,17 @@ function StockTab({ qc }: { qc: any }) {
 
     const products = useQuery({
         queryKey: ["products"],
-        queryFn: async () => {
-            const { data } = await api.get<Product[]>("/inventory/products");
-            return data;
-        },
+        queryFn: async () => (await api.get<Product[]>("/inventory/products")).data,
     });
 
     const warehouses = useQuery({
         queryKey: ["warehouses"],
-        queryFn: async () => {
-            const { data } = await api.get<Warehouse[]>("/warehouses");
-            return data;
-        },
+        queryFn: async () => (await api.get<Warehouse[]>("/warehouses")).data,
     });
 
     const stock = useQuery({
         queryKey: ["stock"],
-        queryFn: async () => {
-            const { data } = await api.get<Stock[]>("/inventory/stock");
-            return data;
-        },
+        queryFn: async () => (await api.get<Stock[]>("/inventory/stock")).data,
     });
 
     const receive = useMutation({
@@ -226,6 +236,15 @@ function StockTab({ qc }: { qc: any }) {
     function warehouseName(id: string) {
         return warehouses.data?.find((w) => w.id === id)?.name ?? id.slice(0, 8);
     }
+
+    const filtered = (stock.data ?? []).filter((s) => {
+        if (!search) return true;
+        const t = search.toLowerCase();
+        return (
+            productName(s.product_id).toLowerCase().includes(t) ||
+            warehouseName(s.warehouse_id).toLowerCase().includes(t)
+        );
+    });
 
     return (
         <>
@@ -271,37 +290,53 @@ function StockTab({ qc }: { qc: any }) {
                 </form>
             )}
 
-            <div className="glass overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="text-dim text-xs uppercase tracking-widest">
-                        <tr>
-                            <th className="text-left px-4 py-3">Product</th>
-                            <th className="text-left px-4 py-3">Warehouse</th>
-                            <th className="text-right px-4 py-3">Qty</th>
-                            <th className="text-right px-4 py-3">Reserved</th>
-                            <th className="text-right px-4 py-3">Available</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {stock.data?.map((s) => (
-                            <tr key={s.id} className="border-t border-white/5">
-                                <td className="px-4 py-3">{productName(s.product_id)}</td>
-                                <td className="px-4 py-3 text-dim">{warehouseName(s.warehouse_id)}</td>
-                                <td className="px-4 py-3 text-right">{s.quantity}</td>
-                                <td className="px-4 py-3 text-right text-dim">{s.reserved_quantity}</td>
-                                <td className="px-4 py-3 text-right font-semibold">{s.available}</td>
-                            </tr>
-                        ))}
-                        {(!stock.data || stock.data.length === 0) && (
+            {stock.isLoading ? (
+                <SkeletonTable rows={6} cols={5} />
+            ) : (
+                <div className="glass overflow-hidden">
+                    <table className="table">
+                        <thead>
                             <tr>
-                                <td colSpan={5} className="px-4 py-8 text-center text-dim">
-                                    No stock yet.
-                                </td>
+                                <th>Product</th>
+                                <th>Warehouse</th>
+                                <th className="text-right">Qty</th>
+                                <th className="text-right">Reserved</th>
+                                <th className="text-right">Available</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {filtered.map((s) => (
+                                <tr key={s.id}>
+                                    <td>{productName(s.product_id)}</td>
+                                    <td className="text-dim">{warehouseName(s.warehouse_id)}</td>
+                                    <td className="text-right">{s.quantity}</td>
+                                    <td className="text-right text-dim">{s.reserved_quantity}</td>
+                                    <td className="text-right font-semibold">{s.available}</td>
+                                </tr>
+                            ))}
+                            {filtered.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="text-center py-10">
+                                        {stock.data?.length === 0 ? (
+                                            <>
+                                                <div className="text-dim text-sm">No stock yet.</div>
+                                                <button
+                                                    className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                                    onClick={() => setShowForm(true)}
+                                                >
+                                                    Receive stock
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="text-dim text-sm">No matches.</div>
+                                        )}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </>
     );
 }

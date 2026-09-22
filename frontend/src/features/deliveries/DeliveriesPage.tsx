@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
+import { SkeletonTable } from "../../shared/components/Skeleton";
 import StatusBadge from "../../shared/components/StatusBadge";
 
 interface Delivery {
@@ -23,8 +24,10 @@ export default function DeliveriesPage() {
     const [dropoff, setDropoff] = useState("");
     const [lat, setLat] = useState("");
     const [lng, setLng] = useState("");
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
 
-    const { data } = useQuery({
+    const { data, isLoading } = useQuery({
         queryKey: ["deliveries"],
         queryFn: async () => (await api.get<Delivery[]>("/deliveries")).data,
     });
@@ -51,6 +54,13 @@ export default function DeliveriesPage() {
         e.preventDefault();
         create.mutate();
     }
+
+    const filtered = (data ?? []).filter((d) => {
+        if (statusFilter && d.status !== statusFilter) return false;
+        if (search && !d.dropoff_location.toLowerCase().includes(search.toLowerCase()))
+            return false;
+        return true;
+    });
 
     return (
         <div>
@@ -81,39 +91,88 @@ export default function DeliveriesPage() {
                 </form>
             )}
 
-            <div className="glass overflow-hidden">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Dropoff</th>
-                            <th>Status</th>
-                            <th>Coords</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data?.map((d) => (
-                            <tr
-                                key={d.id}
-                                className="cursor-pointer"
-                                onClick={() => navigate(`/deliveries/${d.id}`)}
-                            >
-                                <td>{d.dropoff_location}</td>
-                                <td><StatusBadge domain="delivery" value={d.status} /></td>
-                                <td className="text-dim text-xs font-mono">
-                                    {d.dropoff_lat != null
-                                        ? `${d.dropoff_lat.toFixed(3)}, ${d.dropoff_lng?.toFixed(3)}`
-                                        : "—"}
-                                </td>
-                            </tr>
-                        ))}
-                        {(!data || data.length === 0) && (
-                            <tr>
-                                <td colSpan={3} className="text-center text-dim py-8">No deliveries yet.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+            <div className="flex gap-2 mb-4 flex-wrap">
+                <input
+                    className="input !w-64"
+                    placeholder="Search dropoff…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+                <select
+                    className="input !w-40"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                    <option value="">All statuses</option>
+                    {[
+                        "pending",
+                        "assigned",
+                        "picked_up",
+                        "in_transit",
+                        "delivered",
+                        "failed",
+                        "rescheduled",
+                        "returned",
+                        "cancelled",
+                    ].map((s) => (
+                        <option key={s} value={s}>
+                            {s.replace(/_/g, " ")}
+                        </option>
+                    ))}
+                </select>
             </div>
+
+            {isLoading ? (
+                <SkeletonTable rows={6} cols={3} />
+            ) : (
+                <div className="glass overflow-hidden">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Dropoff</th>
+                                <th>Status</th>
+                                <th>Coords</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map((d) => (
+                                <tr
+                                    key={d.id}
+                                    className="cursor-pointer"
+                                    onClick={() => navigate(`/deliveries/${d.id}`)}
+                                >
+                                    <td>{d.dropoff_location}</td>
+                                    <td><StatusBadge domain="delivery" value={d.status} /></td>
+                                    <td className="text-dim text-xs font-mono">
+                                        {d.dropoff_lat != null
+                                            ? `${d.dropoff_lat.toFixed(3)}, ${d.dropoff_lng?.toFixed(3)}`
+                                            : "—"}
+                                    </td>
+                                </tr>
+                            ))}
+                            {filtered.length === 0 && (
+                                <tr>
+                                    <td colSpan={3} className="text-center py-10">
+                                        {data?.length === 0 ? (
+                                            <>
+                                                <div className="text-dim text-sm">No deliveries yet.</div>
+                                                <button
+                                                    className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                                    onClick={() => setShowForm(true)}
+                                                >
+                                                    Create your first delivery
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="text-dim text-sm">No matches.</div>
+                                        )}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }

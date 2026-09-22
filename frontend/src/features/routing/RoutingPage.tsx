@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
 
 import { api } from "../../shared/api/client";
+import { SkeletonBlock } from "../../shared/components/Skeleton";
+import StatusBadge from "../../shared/components/StatusBadge";
 
 interface Delivery {
     id: string;
@@ -78,9 +80,10 @@ export default function RoutingPage() {
         onSuccess: () => qc.invalidateQueries({ queryKey: ["routes"] }),
     });
 
-    const eligible = deliveries.data?.filter((d) =>
-        ["pending", "assigned", "rescheduled"].includes(d.status),
-    ) ?? [];
+    const eligible =
+        deliveries.data?.filter((d) =>
+            ["pending", "assigned", "rescheduled"].includes(d.status),
+        ) ?? [];
 
     function toggle(id: string) {
         setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -149,64 +152,99 @@ export default function RoutingPage() {
                 </form>
             )}
 
-            <div className="space-y-4">
-                {routes.data?.map((r) => (
-                    <div key={r.id} className="glass p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <div className="font-semibold">Driver: {driverName(r.driver_id)}</div>
-                                <div className="text-dim text-xs">{r.date} · {r.status}</div>
+            {routes.isLoading ? (
+                <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="glass p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-2">
+                                    <SkeletonBlock className="h-4 w-40" />
+                                    <SkeletonBlock className="h-3 w-24" />
+                                </div>
+                                <SkeletonBlock className="h-6 w-20 rounded-full" />
                             </div>
-                            <div className="text-right">
-                                <div className="text-sm">{r.total_distance_m ? `${(Number(r.total_distance_m) / 1000).toFixed(1)} km` : "—"}</div>
-                                <div className="text-dim text-xs">{r.total_duration_s ? `${(Number(r.total_duration_s) / 60).toFixed(0)} min` : ""}</div>
+                            <SkeletonBlock className="h-4" />
+                            <SkeletonBlock className="h-4 w-3/4" />
+                        </div>
+                    ))}
+                </div>
+            ) : routes.data && routes.data.length > 0 ? (
+                <div className="space-y-4">
+                    {routes.data.map((r) => (
+                        <div key={r.id} className="glass p-6">
+                            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                                <div>
+                                    <div className="font-semibold">Driver: {driverName(r.driver_id)}</div>
+                                    <div className="text-dim text-xs">
+                                        {r.date} · <StatusBadge domain="route" value={r.status} />
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-sm">
+                                        {r.total_distance_m ? `${(Number(r.total_distance_m) / 1000).toFixed(1)} km` : "—"}
+                                    </div>
+                                    <div className="text-dim text-xs">
+                                        {r.total_duration_s ? `${(Number(r.total_duration_s) / 60).toFixed(0)} min` : ""}
+                                    </div>
+                                </div>
+                            </div>
+                            <ol className="space-y-2 mb-4">
+                                {r.stops.map((s) => (
+                                    <li key={s.id} className="flex items-center justify-between text-sm border-t border-white/5 pt-2 flex-wrap gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-dim">#{s.sequence}</span>
+                                            <span className="font-mono text-xs">{s.delivery_id.slice(0, 8)}</span>
+                                            {s.eta && (
+                                                <span className="text-dim text-xs">
+                                                    ETA {new Date(s.eta).toLocaleTimeString()}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="status status-neutral">{s.status}</span>
+                                            {s.status === "pending" && (
+                                                <button
+                                                    className="btn btn-ghost !py-1 !px-2 text-xs"
+                                                    onClick={() => setStopStatus.mutate({ stopId: s.id, status: "arrived" })}
+                                                >
+                                                    arrived
+                                                </button>
+                                            )}
+                                            {s.status === "arrived" && (
+                                                <button
+                                                    className="btn btn-ghost !py-1 !px-2 text-xs"
+                                                    onClick={() => setStopStatus.mutate({ stopId: s.id, status: "completed" })}
+                                                >
+                                                    done
+                                                </button>
+                                            )}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ol>
+                            <div className="flex justify-end">
+                                <button
+                                    className="btn btn-ghost !py-1 !px-3 text-xs"
+                                    disabled={recalc.isPending}
+                                    onClick={() => recalc.mutate(r.id)}
+                                >
+                                    Recalculate
+                                </button>
                             </div>
                         </div>
-                        <ol className="space-y-2 mb-4">
-                            {r.stops.map((s) => (
-                                <li key={s.id} className="flex items-center justify-between text-sm border-t border-white/5 pt-2">
-                                    <div>
-                                        <span className="text-dim mr-2">#{s.sequence}</span>
-                                        <span>{s.delivery_id.slice(0, 8)}</span>
-                                        <span className="text-dim ml-2 text-xs">{s.eta ? new Date(s.eta).toLocaleTimeString() : ""}</span>
-                                    </div>
-                                    <div className="space-x-2">
-                                        <span className="text-xs px-2 py-1 rounded-full bg-white/5">{s.status}</span>
-                                        {s.status === "pending" && (
-                                            <button
-                                                className="btn btn-ghost !py-1 !px-2 text-xs"
-                                                onClick={() => setStopStatus.mutate({ stopId: s.id, status: "arrived" })}
-                                            >
-                                                arrived
-                                            </button>
-                                        )}
-                                        {s.status === "arrived" && (
-                                            <button
-                                                className="btn btn-ghost !py-1 !px-2 text-xs"
-                                                onClick={() => setStopStatus.mutate({ stopId: s.id, status: "completed" })}
-                                            >
-                                                done
-                                            </button>
-                                        )}
-                                    </div>
-                                </li>
-                            ))}
-                        </ol>
-                        <div className="flex justify-end">
-                            <button
-                                className="btn btn-ghost !py-1 !px-3 text-xs"
-                                disabled={recalc.isPending}
-                                onClick={() => recalc.mutate(r.id)}
-                            >
-                                Recalculate
-                            </button>
-                        </div>
-                    </div>
-                ))}
-                {(!routes.data || routes.data.length === 0) && (
-                    <div className="glass p-8 text-center text-dim">No routes yet.</div>
-                )}
-            </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="glass p-10 text-center">
+                    <div className="text-dim text-sm">No routes yet.</div>
+                    <button
+                        className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                        onClick={() => setShowForm(true)}
+                    >
+                        Build your first route
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

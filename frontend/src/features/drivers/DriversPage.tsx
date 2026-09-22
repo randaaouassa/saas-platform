@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
+import { SkeletonBlock } from "../../shared/components/Skeleton";
 import StatusBadge from "../../shared/components/StatusBadge";
 
 interface Driver {
@@ -22,8 +23,10 @@ export default function DriversPage() {
     const [fullName, setFullName] = useState("");
     const [phone, setPhone] = useState("");
     const [license, setLicense] = useState("");
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
 
-    const { data } = useQuery({
+    const { data, isLoading } = useQuery({
         queryKey: ["drivers"],
         queryFn: async () => (await api.get<Driver[]>("/drivers")).data,
     });
@@ -58,6 +61,13 @@ export default function DriversPage() {
         create.mutate();
     }
 
+    const filtered = (data ?? []).filter((d) => {
+        if (statusFilter && d.status !== statusFilter) return false;
+        if (search && !d.full_name.toLowerCase().includes(search.toLowerCase()))
+            return false;
+        return true;
+    });
+
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
@@ -87,37 +97,88 @@ export default function DriversPage() {
                 </form>
             )}
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {data?.map((d) => (
-                    <div
-                        key={d.id}
-                        className="glass glass-hover p-5 cursor-pointer"
-                        onClick={() => navigate(`/drivers/${d.id}`)}
-                    >
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <div className="font-semibold">{d.full_name}</div>
-                                <div className="text-dim text-xs mt-1">{d.phone || "no phone"}</div>
-                            </div>
-                            <StatusBadge domain="driver" value={d.status} />
-                        </div>
-                        {d.status === "offline" && (
-                            <button
-                                className="btn btn-ghost mt-4 !py-1 !px-3 text-xs"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    startShift.mutate(d.id);
-                                }}
-                            >
-                                Start shift
-                            </button>
-                        )}
-                    </div>
-                ))}
-                {(!data || data.length === 0) && (
-                    <div className="glass p-8 text-dim col-span-full text-center">No drivers yet.</div>
-                )}
+            <div className="flex gap-2 mb-4 flex-wrap">
+                <input
+                    className="input !w-64"
+                    placeholder="Search by name…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+                <select
+                    className="input !w-40"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                    <option value="">All statuses</option>
+                    {["offline", "available", "assigned", "on_delivery", "on_break"].map((s) => (
+                        <option key={s} value={s}>
+                            {s.replace(/_/g, " ")}
+                        </option>
+                    ))}
+                </select>
             </div>
+
+            {isLoading ? (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="glass p-5 space-y-3">
+                            <div className="flex justify-between items-start">
+                                <div className="space-y-2 flex-1">
+                                    <SkeletonBlock className="h-4 w-32" />
+                                    <SkeletonBlock className="h-3 w-24" />
+                                </div>
+                                <SkeletonBlock className="h-6 w-16 rounded-full" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filtered.map((d) => (
+                        <div
+                            key={d.id}
+                            className="glass glass-hover p-5 cursor-pointer"
+                            onClick={() => navigate(`/drivers/${d.id}`)}
+                        >
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="font-semibold">{d.full_name}</div>
+                                    <div className="text-dim text-xs mt-1">{d.phone || "no phone"}</div>
+                                </div>
+                                <StatusBadge domain="driver" value={d.status} />
+                            </div>
+                            {d.status === "offline" && (
+                                <button
+                                    className="btn btn-ghost mt-4 !py-1 !px-3 text-xs"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        startShift.mutate(d.id);
+                                    }}
+                                >
+                                    Start shift
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                    {filtered.length === 0 && (
+                        <div className="glass p-10 col-span-full text-center">
+                            {data?.length === 0 ? (
+                                <>
+                                    <div className="text-dim text-sm">No drivers yet.</div>
+                                    <button
+                                        className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                        onClick={() => setShowForm(true)}
+                                    >
+                                        Add your first driver
+                                    </button>
+                                </>
+                            ) : (
+                                <div className="text-dim text-sm">No matches.</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

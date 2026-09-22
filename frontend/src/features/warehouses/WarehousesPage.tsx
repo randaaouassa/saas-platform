@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import type { FormEvent } from "react";
+import { useState } from "react";
 
 import { api } from "../../shared/api/client";
+import { SkeletonBlock } from "../../shared/components/Skeleton";
 
 interface Warehouse {
     id: string;
@@ -19,13 +20,11 @@ export default function WarehousesPage() {
     const [name, setName] = useState("");
     const [code, setCode] = useState("");
     const [address, setAddress] = useState("");
+    const [search, setSearch] = useState("");
 
     const { data, isLoading } = useQuery({
         queryKey: ["warehouses"],
-        queryFn: async () => {
-            const { data } = await api.get<Warehouse[]>("/warehouses");
-            return data;
-        },
+        queryFn: async () => (await api.get<Warehouse[]>("/warehouses")).data,
     });
 
     const create = useMutation({
@@ -51,6 +50,16 @@ export default function WarehousesPage() {
         e.preventDefault();
         create.mutate();
     }
+
+    const filtered = (data ?? []).filter((w) => {
+        if (!search) return true;
+        const s = search.toLowerCase();
+        return (
+            w.name.toLowerCase().includes(s) ||
+            w.code.toLowerCase().includes(s) ||
+            w.address.toLowerCase().includes(s)
+        );
+    });
 
     return (
         <div>
@@ -83,23 +92,60 @@ export default function WarehousesPage() {
                 </form>
             )}
 
+            <div className="mb-4">
+                <input
+                    className="input !w-64"
+                    placeholder="Search warehouses…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+            </div>
+
             {isLoading ? (
-                <div className="text-dim">Loading…</div>
-            ) : data && data.length > 0 ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {data.map((w) => (
-                        <div key={w.id} className="glass p-5">
-                            <div className="font-semibold">{w.name}</div>
-                            <div className="text-dim text-sm mt-1">Code: {w.code}</div>
-                            <div className="text-dim text-sm">{w.address || "No address"}</div>
-                            <div className={`mt-3 inline-block text-xs px-2 py-1 rounded-full ${w.is_active ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-dim"}`}>
-                                {w.is_active ? "Active" : "Inactive"}
-                            </div>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="glass p-5 space-y-3">
+                            <SkeletonBlock className="h-4 w-32" />
+                            <SkeletonBlock className="h-3 w-20" />
+                            <SkeletonBlock className="h-3 w-40" />
                         </div>
                     ))}
                 </div>
             ) : (
-                <div className="glass p-8 text-center text-dim">No warehouses yet. Create one to get started.</div>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filtered.map((w) => (
+                        <div key={w.id} className="glass glass-hover p-5">
+                            <div className="font-semibold">{w.name}</div>
+                            <div className="text-dim text-sm mt-1">Code: {w.code}</div>
+                            <div className="text-dim text-sm">{w.address || "No address"}</div>
+                            <div
+                                className={`mt-3 inline-block text-xs px-2 py-1 rounded-full ${w.is_active
+                                        ? "bg-emerald-500/15 text-emerald-300"
+                                        : "bg-white/5 text-dim"
+                                    }`}
+                            >
+                                {w.is_active ? "Active" : "Inactive"}
+                            </div>
+                        </div>
+                    ))}
+                    {filtered.length === 0 && (
+                        <div className="glass p-10 col-span-full text-center">
+                            {data?.length === 0 ? (
+                                <>
+                                    <div className="text-dim text-sm">No warehouses yet.</div>
+                                    <button
+                                        className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                        onClick={() => setShowForm(true)}
+                                    >
+                                        Create your first warehouse
+                                    </button>
+                                </>
+                            ) : (
+                                <div className="text-dim text-sm">No matches.</div>
+                            )}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );

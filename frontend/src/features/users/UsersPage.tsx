@@ -9,6 +9,7 @@ import {
     listUsers,
     revokeRole,
 } from "../../shared/api/users";
+import { SkeletonTable } from "../../shared/components/Skeleton";
 import InviteModal from "./InviteModal";
 
 export default function UsersPage() {
@@ -66,45 +67,48 @@ export default function UsersPage() {
                 </div>
             )}
 
-            <div className="glass overflow-hidden">
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Roles</th>
-                            <th>Status</th>
-                            <th className="text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {users.data?.map((u) => (
-                            <UserRow
-                                key={u.id}
-                                user={u}
-                                roles={roles.data ?? []}
-                                onAssign={(role) => assign.mutate({ id: u.id, role })}
-                                onRevoke={(role) => revoke.mutate({ id: u.id, role })}
-                                onDeactivate={() => deactivate.mutate(u.id)}
-                            />
-                        ))}
-                        {!users.data && (
+            {users.isLoading ? (
+                <SkeletonTable rows={5} cols={5} />
+            ) : (
+                <div className="glass overflow-hidden">
+                    <table className="table">
+                        <thead>
                             <tr>
-                                <td colSpan={5} className="text-center text-dim py-8">
-                                    Loading…
-                                </td>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Roles</th>
+                                <th>Status</th>
+                                <th className="text-right">Actions</th>
                             </tr>
-                        )}
-                        {users.data?.length === 0 && (
-                            <tr>
-                                <td colSpan={5} className="text-center text-dim py-8">
-                                    No users yet.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {users.data?.map((u) => (
+                                <UserRow
+                                    key={u.id}
+                                    user={u}
+                                    roles={roles.data ?? []}
+                                    onAssign={(role) => assign.mutate({ id: u.id, role })}
+                                    onRevoke={(role) => revoke.mutate({ id: u.id, role })}
+                                    onDeactivate={() => deactivate.mutate(u.id)}
+                                />
+                            ))}
+                            {users.data?.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="text-center py-10">
+                                        <div className="text-dim text-sm">No users yet.</div>
+                                        <button
+                                            className="btn btn-primary mt-3 !py-1.5 !px-3 text-xs"
+                                            onClick={() => setInviteOpen(true)}
+                                        >
+                                            Invite your first user
+                                        </button>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             {inviteOpen && roles.data && (
                 <InviteModal
@@ -178,7 +182,9 @@ function UserRow({
                 </div>
             </td>
             <td>
-                <span className={`status ${user.is_active ? "status-success" : "status-neutral"}`}>
+                <span
+                    className={`status ${user.is_active ? "status-success" : "status-neutral"}`}
+                >
                     {user.is_active ? "active" : "inactive"}
                 </span>
             </td>
