@@ -13,6 +13,8 @@ const NAV = [
     { to: "/dispatch", label: "Dispatch" },
     { to: "/routing", label: "Routing" },
     { to: "/notifications", label: "Notifications" },
+    { to: "/users", label: "Users" },
+    { to: "/settings", label: "Settings" },
 ];
 
 export default function AppLayout() {
@@ -35,7 +37,7 @@ export default function AppLayout() {
                     <span className="text-dim">{connected ? "Live" : "Offline"}</span>
                 </div>
 
-                <nav className="flex-1 flex flex-col gap-1">
+                <nav className="flex-1 flex flex-col gap-1 overflow-auto">
                     {NAV.map((n) => (
                         <NavLink
                             key={n.to}
@@ -53,7 +55,9 @@ export default function AppLayout() {
                 </nav>
 
                 <div className="border-t border-white/5 pt-4 text-sm">
-                    <div className="text-white truncate text-xs">{user?.full_name || user?.email}</div>
+                    <div className="text-white truncate text-xs">
+                        {user?.full_name || user?.email}
+                    </div>
                     <div className="text-dim text-[10px] uppercase tracking-wider truncate mt-0.5">
                         {user?.role}
                     </div>

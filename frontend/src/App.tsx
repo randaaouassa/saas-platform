@@ -7,6 +7,7 @@ import ProtectedRoute from "./app/ProtectedRoute";
 import RoleRedirect from "./app/RoleRedirect";
 import WarehouseLayout from "./app/WarehouseLayout";
 import DashboardPage from "./features/analytics/DashboardPage";
+import AcceptInvitePage from "./features/auth/AcceptInvitePage";
 import LoginPage from "./features/auth/LoginPage";
 import RegisterPage from "./features/auth/RegisterPage";
 import DeliveriesPage from "./features/deliveries/DeliveriesPage";
@@ -19,7 +20,9 @@ import LandingPage from "./features/landing/LandingPage";
 import NotificationsPage from "./features/notifications/NotificationsPage";
 import OrdersPage from "./features/orders/OrdersPage";
 import RoutingPage from "./features/routing/RoutingPage";
+import SettingsPage from "./features/settings/SettingsPage";
 import TrackingPage from "./features/tracking/TrackingPage";
+import UsersPage from "./features/users/UsersPage";
 import WarehouseHome from "./features/warehouse/WarehouseHome";
 import WarehousesPage from "./features/warehouses/WarehousesPage";
 
@@ -29,9 +32,9 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/invite" element={<AcceptInvitePage />} />
       <Route path="/track/:token" element={<TrackingPage />} />
 
-      {/* Admin */}
       <Route
         element={
           <ProtectedRoute>
@@ -48,9 +51,10 @@ export default function App() {
         <Route path="/dispatch" element={<DispatchPage />} />
         <Route path="/routing" element={<RoutingPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
 
-      {/* Dispatcher */}
       <Route
         element={
           <ProtectedRoute>
@@ -62,7 +66,6 @@ export default function App() {
         <Route path="/dispatcher/dispatch" element={<DispatchPage />} />
       </Route>
 
-      {/* Driver */}
       <Route
         element={
           <ProtectedRoute>
@@ -74,7 +77,6 @@ export default function App() {
         <Route path="/driver/notifications" element={<NotificationsPage />} />
       </Route>
 
-      {/* Warehouse */}
       <Route
         element={
           <ProtectedRoute>
