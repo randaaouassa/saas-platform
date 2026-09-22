@@ -8,6 +8,7 @@ from app.core import (
     celery_dlq,  # noqa: F401
     cleanup_tasks,  # noqa: F401
 )
+from app.core.bootstrap import ensure_super_admin
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.idempotency import IdempotencyMiddleware
@@ -27,6 +28,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import customers_router
 from app.modules.orders.router import router as orders_router
 from app.modules.routing.router import router as routing_router
+from app.modules.system.router import router as system_router
 from app.modules.tracking.router import public_router as public_tracking_router
 from app.modules.tracking.router import router as tracking_router
 from app.modules.tracking.router import ws_router as tracking_ws_router
@@ -39,6 +41,7 @@ log = get_logger("app")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    ensure_super_admin()
     log.info("startup", env=settings.ENV, app=settings.APP_NAME)
     yield
     log.info("shutdown")
@@ -82,6 +85,7 @@ app.include_router(analytics_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tracking_router, prefix=settings.API_V1_PREFIX)
 app.include_router(public_tracking_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tracking_ws_router)
+app.include_router(system_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health/live", tags=["system"])

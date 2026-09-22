@@ -35,6 +35,9 @@ class Settings(BaseSettings):
 
     RATE_LIMIT_ENABLED: bool = True
 
+    SUPER_ADMIN_EMAIL: str | None = None
+    SUPER_ADMIN_PASSWORD: str | None = None
+
     @property
     def database_url(self) -> str:
         return (
