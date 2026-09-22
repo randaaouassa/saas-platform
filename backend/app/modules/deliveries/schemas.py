@@ -5,7 +5,6 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
-# ---------- Package ----------
 class PackageCreate(BaseModel):
     code: str = Field(min_length=1, max_length=50)
     weight: Decimal | None = None
@@ -28,7 +27,6 @@ class PackageOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------- Delivery ----------
 class DeliveryCreate(BaseModel):
     order_id: uuid.UUID | None = None
     customer_id: uuid.UUID | None = None
@@ -75,6 +73,7 @@ class DeliveryOut(BaseModel):
     scheduled_at: datetime | None
     delivered_at: datetime | None
     failed_reason: str | None
+    public_token: str | None = None
     created_at: datetime
     updated_at: datetime
     packages: list[PackageOut] = []
@@ -104,7 +103,6 @@ class DeliveryStatusHistoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------- POD ----------
 class PODCreate(BaseModel):
     kind: str = Field(max_length=30)
     s3_key: str | None = Field(default=None, max_length=500)

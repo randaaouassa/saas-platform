@@ -28,6 +28,7 @@ class Delivery(UUIDPKMixin, TimestampMixin, TenantMixin, Base):
     scheduled_at: Mapped[datetime | None] = mapped_column()
     delivered_at: Mapped[datetime | None] = mapped_column()
     failed_reason: Mapped[str | None] = mapped_column(String(500))
+    public_token: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
 
     packages: Mapped[list["Package"]] = relationship(
         back_populates="delivery", cascade="all, delete-orphan"

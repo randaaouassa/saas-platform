@@ -27,7 +27,9 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import customers_router
 from app.modules.orders.router import router as orders_router
 from app.modules.routing.router import router as routing_router
+from app.modules.tracking.router import public_router as public_tracking_router
 from app.modules.tracking.router import router as tracking_router
+from app.modules.tracking.router import ws_router as tracking_ws_router
 from app.modules.warehouse.router import router as warehouse_router
 
 configure_logging()
@@ -77,7 +79,9 @@ app.include_router(dispatch_router, prefix=settings.API_V1_PREFIX)
 app.include_router(routing_router, prefix=settings.API_V1_PREFIX)
 app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
 app.include_router(analytics_router, prefix=settings.API_V1_PREFIX)
-app.include_router(tracking_router)
+app.include_router(tracking_router, prefix=settings.API_V1_PREFIX)
+app.include_router(public_tracking_router, prefix=settings.API_V1_PREFIX)
+app.include_router(tracking_ws_router)
 
 
 @app.get("/health/live", tags=["system"])

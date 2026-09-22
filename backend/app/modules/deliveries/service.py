@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from datetime import datetime, timezone
 
@@ -42,6 +43,26 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _new_token() -> str:
+    return secrets.token_urlsafe(16)[:22]
+
+
+def _track(db, org_id: uuid.UUID, delivery_id: uuid.UUID, event_type: str,
+           lat: float | None = None, lng: float | None = None, payload: dict | None = None) -> None:
+    from app.modules.tracking.models import TrackingEvent
+
+    db.add(
+        TrackingEvent(
+            organization_id=org_id,
+            delivery_id=delivery_id,
+            type=event_type,
+            lat=lat,
+            lng=lng,
+            payload_json=payload or {},
+        )
+    )
+
+
 def create_delivery(
     uow: UnitOfWork, org_id: uuid.UUID, actor_id: uuid.UUID, payload: DeliveryCreate
 ) -> Delivery:
@@ -58,6 +79,7 @@ def create_delivery(
         dropoff_lng=payload.dropoff_lng,
         scheduled_at=payload.scheduled_at,
         status="pending",
+        public_token=_new_token(),
     )
     db.add(d)
     uow.flush()
@@ -89,6 +111,7 @@ def create_delivery(
             from_status=None, to_status="pending", actor_id=actor_id,
         )
     )
+    _track(db, org_id, d.id, "pending")
     emit(db, type="delivery.created", aggregate_type="delivery", aggregate_id=d.id,
          organization_id=org_id, actor_id=actor_id,
          payload={"dropoff": d.dropoff_location})
@@ -154,6 +177,7 @@ def cancel_delivery(
             actor_id=actor_id, note=payload.reason,
         )
     )
+    _track(db, org_id, d.id, "cancelled", payload={"reason": payload.reason})
     emit(db, type="delivery.cancelled", aggregate_type="delivery", aggregate_id=d.id,
          organization_id=org_id, actor_id=actor_id, payload={"reason": payload.reason})
     record(db, organization_id=org_id, actor_id=actor_id,
@@ -182,6 +206,8 @@ def reschedule_delivery(
             from_status=prev, to_status="rescheduled", actor_id=actor_id,
         )
     )
+    _track(db, org_id, d.id, "rescheduled",
+           payload={"scheduled_at": payload.scheduled_at.isoformat()})
     record(db, organization_id=org_id, actor_id=actor_id,
            action="delivery.rescheduled", resource="delivery", resource_id=str(d.id))
     uow.commit()
@@ -218,6 +244,8 @@ def transition_delivery(
             lat=payload.lat, lng=payload.lng, note=payload.note,
         )
     )
+    _track(db, org_id, d.id, target, lat=payload.lat, lng=payload.lng,
+           payload={"from": current, "note": payload.note})
     emit(db, type=f"delivery.{target}", aggregate_type="delivery", aggregate_id=d.id,
          organization_id=org_id, actor_id=actor_id,
          payload={"from": current, "lat": payload.lat, "lng": payload.lng})
