@@ -48,3 +48,40 @@ class RebuildResponse(BaseModel):
     deliveries_rows: int
     driver_rows: int
     inventory_rows: int
+
+
+class RangeOrdersItem(BaseModel):
+    date: date
+    orders_count: int
+    delivered_count: int
+    cancelled_count: int
+    revenue: float
+
+
+class RangeDeliveriesItem(BaseModel):
+    date: date
+    deliveries_count: int
+    delivered_count: int
+    failed_count: int
+    success_rate: float
+
+
+class RangeResponse(BaseModel):
+    from_date: date
+    to_date: date
+    orders: list[RangeOrdersItem]
+    deliveries: list[RangeDeliveriesItem]
+    total_revenue: float
+    total_orders: int
+    total_deliveries: int
+    total_delivered: int
+    total_failed: int
+    avg_delivery_time_s: float | None
+    top_products: list[dict]
+
+
+class AvgDeliveryTimeResponse(BaseModel):
+    from_date: date
+    to_date: date
+    avg_duration_s: float | None
+    sample_count: int

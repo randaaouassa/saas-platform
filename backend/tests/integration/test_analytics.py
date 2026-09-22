@@ -23,13 +23,14 @@ def _h(tok):
 
 def test_rebuild_and_read_overview(client):
     tok = _register(client)
+    u = uuid.uuid4().hex[:6]
 
     wh = client.post(
-        "/api/v1/warehouses", json={"name": "WH", "code": "WH1"}, headers=_h(tok)
+        "/api/v1/warehouses", json={"name": "WH", "code": f"WH{u}"}, headers=_h(tok)
     ).json()
     p = client.post(
         "/api/v1/inventory/products",
-        json={"sku": "SKU1", "name": "Widget"},
+        json={"sku": f"SKU-{u}", "name": "Widget"},
         headers=_h(tok),
     ).json()
     client.post(
@@ -38,15 +39,13 @@ def test_rebuild_and_read_overview(client):
         headers=_h(tok),
     )
     c = client.post(
-        "/api/v1/customers",
-        json={"name": "Jane"},
-        headers=_h(tok),
+        "/api/v1/customers", json={"name": "Jane"}, headers=_h(tok)
     ).json()
     client.post(
         "/api/v1/orders",
         json={
             "customer_id": c["id"],
-            "number": "O-1",
+            "number": f"O-{u}",
             "warehouse_id": wh["id"],
             "items": [{"product_id": p["id"], "quantity": "2", "unit_price": "5"}],
         },
@@ -66,6 +65,78 @@ def test_rebuild_and_read_overview(client):
     assert data["orders"]["orders_count"] == 1
     assert data["orders"]["revenue"] == 10.0
     assert len(data["inventory"]) >= 1
+
+
+def test_range_summary(client):
+    tok = _register(client)
+    u = uuid.uuid4().hex[:6]
+    today = date.today().isoformat()
+
+    wh = client.post(
+        "/api/v1/warehouses", json={"name": "WH", "code": f"WH{u}"}, headers=_h(tok)
+    ).json()
+    p = client.post(
+        "/api/v1/inventory/products",
+        json={"sku": f"SKU-{u}", "name": "Widget"},
+        headers=_h(tok),
+    ).json()
+    c = client.post("/api/v1/customers", json={"name": "J"}, headers=_h(tok)).json()
+    client.post(
+        "/api/v1/orders",
+        json={
+            "customer_id": c["id"],
+            "number": f"O-{u}",
+            "warehouse_id": wh["id"],
+            "items": [{"product_id": p["id"], "quantity": "3", "unit_price": "5"}],
+        },
+        headers=_h(tok),
+    )
+    client.post(f"/api/v1/analytics/rebuild?day={today}", headers=_h(tok))
+
+    r = client.get(
+        f"/api/v1/analytics/range?from={today}&to={today}", headers=_h(tok)
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total_orders"] == 1
+    assert body["total_revenue"] == 15.0
+    assert len(body["orders"]) == 1
+    assert len(body["top_products"]) >= 1
+
+
+def test_avg_delivery_time(client):
+    tok = _register(client)
+    today = date.today().isoformat()
+
+    d = client.post(
+        "/api/v1/deliveries", json={"dropoff_location": "X"}, headers=_h(tok)
+    ).json()
+    for s in ["assigned", "picked_up", "in_transit", "delivered"]:
+        client.post(
+            f"/api/v1/deliveries/{d['id']}/status",
+            json={"status": s},
+            headers=_h(tok),
+        )
+
+    r = client.get(
+        f"/api/v1/analytics/avg-delivery-time?from={today}&to={today}",
+        headers=_h(tok),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["sample_count"] == 1
+    assert body["avg_duration_s"] is not None
+
+
+def test_export_csv(client):
+    tok = _register(client)
+    today = date.today().isoformat()
+    r = client.get(
+        f"/api/v1/analytics/export/orders.csv?from={today}&to={today}",
+        headers=_h(tok),
+    )
+    assert r.status_code == 200
+    assert "date,orders_count" in r.text
 
 
 def test_orders_and_deliveries_endpoints(client):
