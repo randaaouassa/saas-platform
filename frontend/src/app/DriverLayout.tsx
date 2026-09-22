@@ -5,7 +5,7 @@ import { useAuthStore } from "../shared/stores/auth";
 
 const NAV = [
     { to: "/driver", label: "Today" },
-    { to: "/notifications", label: "Notifications" },
+    { to: "/driver/notifications", label: "Notifications" },
 ];
 
 export default function DriverLayout() {

@@ -64,6 +64,10 @@ export default function App() {
       >
         <Route path="/dispatcher" element={<DispatcherHome />} />
         <Route path="/dispatcher/dispatch" element={<DispatchPage />} />
+        <Route path="/dispatcher/routing" element={<RoutingPage />} />
+        <Route path="/dispatcher/drivers" element={<DriversPage />} />
+        <Route path="/dispatcher/deliveries" element={<DeliveriesPage />} />
+        <Route path="/dispatcher/notifications" element={<NotificationsPage />} />
       </Route>
 
       <Route
@@ -85,9 +89,11 @@ export default function App() {
         }
       >
         <Route path="/warehouse" element={<WarehouseHome />} />
+        <Route path="/warehouse/warehouses" element={<WarehousesPage />} />
         <Route path="/warehouse/inventory" element={<InventoryPage />} />
         <Route path="/warehouse/orders" element={<OrdersPage />} />
         <Route path="/warehouse/deliveries" element={<DeliveriesPage />} />
+        <Route path="/warehouse/notifications" element={<NotificationsPage />} />
       </Route>
 
       <Route path="/home" element={<RoleRedirect />} />

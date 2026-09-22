@@ -4,7 +4,6 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 
-# ---------- Organization ----------
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
     slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9-]+$")
@@ -21,7 +20,6 @@ class OrganizationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------- User ----------
 class RegisterRequest(BaseModel):
     organization: OrganizationCreate
     email: EmailStr
@@ -56,7 +54,6 @@ class UserRoleChange(BaseModel):
     role_name: str = Field(min_length=2, max_length=50)
 
 
-# ---------- Auth ----------
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -74,7 +71,6 @@ class TokenPair(BaseModel):
     expires_in: int
 
 
-# ---------- Invitations ----------
 class InviteRequest(BaseModel):
     email: EmailStr
     role_name: str = Field(min_length=2, max_length=50)
@@ -90,13 +86,30 @@ class InvitationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InvitationCreated(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    role_id: uuid.UUID
+    expires_at: datetime
+    accepted_at: datetime | None
+    token: str
+
+
+class InvitationValidateOut(BaseModel):
+    email: EmailStr
+    role_name: str
+    org_name: str
+    org_slug: str
+    expires_at: datetime
+    accepted_at: datetime | None
+
+
 class AcceptInviteRequest(BaseModel):
     token: str
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(default="", max_length=200)
 
 
-# ---------- Roles / Permissions ----------
 class RoleOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -113,7 +126,6 @@ class PermissionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------- Password reset ----------
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
     organization_slug: str

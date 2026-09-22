@@ -4,12 +4,12 @@ import { useWebSocket } from "../shared/hooks/useWebSocket";
 import { useAuthStore } from "../shared/stores/auth";
 
 const NAV = [
-    { to: "/dispatcher", label: "Queue" },
-    { to: "/dispatch", label: "Dispatch" },
-    { to: "/routing", label: "Routes" },
-    { to: "/drivers", label: "Drivers" },
-    { to: "/deliveries", label: "Deliveries" },
-    { to: "/notifications", label: "Notifications" },
+    { to: "/dispatcher", label: "Overview" },
+    { to: "/dispatcher/dispatch", label: "Dispatch" },
+    { to: "/dispatcher/routing", label: "Routes" },
+    { to: "/dispatcher/drivers", label: "Drivers" },
+    { to: "/dispatcher/deliveries", label: "Deliveries" },
+    { to: "/dispatcher/notifications", label: "Notifications" },
 ];
 
 export default function DispatcherLayout() {

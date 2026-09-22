@@ -5,7 +5,7 @@ export interface AuthUser {
     id: string;
     email: string;
     full_name: string;
-    role: string;
+    roles: string[];
     organization_id: string;
 }
 
@@ -34,29 +34,28 @@ export const useAuthStore = create<AuthState>()(
     ),
 );
 
-export function useRole(): string | null {
-    return useAuthStore((s) => s.user?.role ?? null);
+export function primaryRole(roles: string[] | null | undefined): string | null {
+    if (!roles || roles.length === 0) return null;
+    const order = [
+        "org_admin",
+        "warehouse_manager",
+        "warehouse_staff",
+        "dispatcher",
+        "driver",
+    ];
+    for (const r of order) if (roles.includes(r)) return r;
+    return roles[0];
 }
 
-export function isAdmin(role: string | null): boolean {
-    return role === "super_admin" || role === "org_admin";
-}
-
-export function isDriver(role: string | null): boolean {
-    return role === "driver";
-}
-
-export function isDispatcher(role: string | null): boolean {
-    return role === "dispatcher";
-}
-
-export function isWarehouse(role: string | null): boolean {
-    return role === "warehouse_manager" || role === "warehouse_staff";
-}
-
-export function homePathForRole(role: string | null): string {
-    if (isDriver(role)) return "/driver";
-    if (isDispatcher(role)) return "/dispatcher";
-    if (isWarehouse(role)) return "/warehouse";
+export function homePathForRoles(roles: string[] | null | undefined): string {
+    const r = primaryRole(roles);
+    if (r === "driver") return "/driver";
+    if (r === "dispatcher") return "/dispatcher";
+    if (r === "warehouse_manager" || r === "warehouse_staff") return "/warehouse";
     return "/dashboard";
+}
+
+export function isAdmin(roles: string[] | null | undefined): boolean {
+    const r = primaryRole(roles);
+    return r === "org_admin";
 }

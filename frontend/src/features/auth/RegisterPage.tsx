@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { fetchMe, register } from "../../shared/api/auth";
-import { homePathForRole, useAuthStore } from "../../shared/stores/auth";
+import { homePathForRoles, useAuthStore } from "../../shared/stores/auth";
 
 export default function RegisterPage() {
     const [orgName, setOrgName] = useState("");
@@ -34,10 +34,10 @@ export default function RegisterPage() {
                 id: me.id,
                 email: me.email,
                 full_name: me.full_name,
-                role: me.role,
+                roles: me.roles,
                 organization_id: me.organization_id,
             });
-            navigate(homePathForRole(me.role));
+            navigate(homePathForRoles(me.roles));
         } catch (err: any) {
             setError(err?.response?.data?.title ?? "Registration failed");
         } finally {
@@ -97,6 +97,7 @@ export default function RegisterPage() {
                         className="input"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
+                        autoComplete="email"
                         required
                     />
                 </div>
@@ -107,6 +108,7 @@ export default function RegisterPage() {
                         className="input"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
                         minLength={8}
                         required
                     />

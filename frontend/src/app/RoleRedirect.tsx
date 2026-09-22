@@ -1,8 +1,8 @@
 import { Navigate } from "react-router-dom";
 
-import { homePathForRole, useRole } from "../shared/stores/auth";
+import { homePathForRoles, useAuthStore } from "../shared/stores/auth";
 
 export default function RoleRedirect() {
-    const role = useRole();
-    return <Navigate to={homePathForRole(role)} replace />;
+    const roles = useAuthStore((s) => s.user?.roles ?? null);
+    return <Navigate to={homePathForRoles(roles)} replace />;
 }

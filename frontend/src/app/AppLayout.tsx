@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useWebSocket } from "../shared/hooks/useWebSocket";
-import { useAuthStore } from "../shared/stores/auth";
+import { primaryRole, useAuthStore } from "../shared/stores/auth";
 
 const NAV = [
     { to: "/dashboard", label: "Dashboard" },
@@ -22,6 +22,7 @@ export default function AppLayout() {
     const logout = useAuthStore((s) => s.logout);
     const navigate = useNavigate();
     const { connected } = useWebSocket();
+    const role = primaryRole(user?.roles);
 
     return (
         <div className="min-h-screen flex">
@@ -59,7 +60,7 @@ export default function AppLayout() {
                         {user?.full_name || user?.email}
                     </div>
                     <div className="text-dim text-[10px] uppercase tracking-wider truncate mt-0.5">
-                        {user?.role}
+                        {role?.replace(/_/g, " ")}
                     </div>
                     <button
                         className="btn btn-ghost mt-2 w-full text-xs"

@@ -11,7 +11,8 @@ export interface MeResponse {
     id: string;
     email: string;
     full_name: string;
-    role: string;
+    phone: string | null;
+    roles: string[];
     organization_id: string;
     is_active: boolean;
     mfa_enabled: boolean;

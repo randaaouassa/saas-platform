@@ -5,11 +5,11 @@ import { useAuthStore } from "../shared/stores/auth";
 
 const NAV = [
     { to: "/warehouse", label: "Overview" },
-    { to: "/warehouses", label: "Warehouses" },
-    { to: "/inventory", label: "Inventory" },
-    { to: "/orders", label: "Orders" },
-    { to: "/deliveries", label: "Deliveries" },
-    { to: "/notifications", label: "Notifications" },
+    { to: "/warehouse/warehouses", label: "Warehouses" },
+    { to: "/warehouse/inventory", label: "Inventory" },
+    { to: "/warehouse/orders", label: "Orders" },
+    { to: "/warehouse/deliveries", label: "Deliveries" },
+    { to: "/warehouse/notifications", label: "Notifications" },
 ];
 
 export default function WarehouseLayout() {

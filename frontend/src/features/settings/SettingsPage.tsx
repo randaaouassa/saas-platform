@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../../shared/api/client";
-import { useAuthStore } from "../../shared/stores/auth";
+import { primaryRole, useAuthStore } from "../../shared/stores/auth";
 
 interface Org {
     id: string;
@@ -53,7 +53,7 @@ export default function SettingsPage() {
                         <div className="space-y-3 text-sm">
                             <Row label="Name" value={user.full_name || "—"} />
                             <Row label="Email" value={user.email} />
-                            <Row label="Role" value={user.role} />
+                            <Row label="Role" value={primaryRole(user.roles)?.replace(/_/g, " ") ?? "—"} />
                             <Row label="User ID" value={user.id.slice(0, 8)} mono />
                         </div>
                     ) : (

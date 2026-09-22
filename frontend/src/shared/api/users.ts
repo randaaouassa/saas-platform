@@ -24,6 +24,16 @@ export interface Invitation {
     role_id: string;
     expires_at: string;
     accepted_at: string | null;
+    token: string;
+}
+
+export interface InvitationValidate {
+    email: string;
+    role_name: string;
+    org_name: string;
+    org_slug: string;
+    expires_at: string;
+    accepted_at: string | null;
 }
 
 export async function listUsers(): Promise<UserWithRoles[]> {
@@ -41,6 +51,13 @@ export async function inviteUser(email: string, role_name: string): Promise<Invi
     return data;
 }
 
+export async function validateInvite(token: string): Promise<InvitationValidate> {
+    const { data } = await api.get<InvitationValidate>("/auth/invitations/validate", {
+        params: { token },
+    });
+    return data;
+}
+
 export async function deactivateUser(id: string) {
     await api.post(`/users/${id}/deactivate`);
 }
@@ -55,8 +72,19 @@ export async function revokeRole(id: string, role_name: string): Promise<UserWit
     return data;
 }
 
-export async function acceptInvite(token: string, password: string, full_name: string) {
-    const { data } = await api.post("/auth/invitations/accept", {
+export interface TokenPair {
+    access_token: string;
+    refresh_token: string;
+    token_type: string;
+    expires_in: number;
+}
+
+export async function acceptInvite(
+    token: string,
+    password: string,
+    full_name: string,
+): Promise<TokenPair> {
+    const { data } = await api.post<TokenPair>("/auth/invitations/accept", {
         token,
         password,
         full_name,

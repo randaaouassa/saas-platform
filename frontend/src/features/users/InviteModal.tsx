@@ -21,7 +21,7 @@ export default function InviteModal({ roles, onClose, onInvited }: Props) {
         setLoading(true);
         try {
             const inv = await inviteUser(email, role);
-            const link = `${window.location.origin}/invite?token=${inv.id}`;
+            const link = `${window.location.origin}/invite?token=${inv.token}`;
             onInvited(link);
             onClose();
         } catch (err: any) {

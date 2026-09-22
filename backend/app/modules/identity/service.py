@@ -22,11 +22,9 @@ from app.modules.identity.models import (
     PasswordResetToken,
     Permission,
     Role,
+    Session as SessionModel,
     User,
     UserRole,
-)
-from app.modules.identity.models import (
-    Session as SessionModel,
 )
 from app.modules.identity.schemas import (
     AcceptInviteRequest,
@@ -54,7 +52,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# ---------- Registration ----------
 def register_organization(
     uow: UnitOfWork, payload: RegisterRequest
 ) -> tuple[User, Organization]:
@@ -93,7 +90,6 @@ def register_organization(
     return user, org
 
 
-# ---------- Auth ----------
 def authenticate(uow: UnitOfWork, payload: LoginRequest) -> User:
     db = uow.session
     org = db.scalar(select(Organization).where(Organization.slug == payload.organization_slug))
@@ -190,7 +186,6 @@ def logout(uow: UnitOfWork, refresh_token: str) -> None:
         uow.commit()
 
 
-# ---------- Invitations ----------
 def invite_user(
     uow: UnitOfWork, org_id: uuid.UUID, invited_by: uuid.UUID, payload: InviteRequest
 ) -> tuple[Invitation, str]:
@@ -223,7 +218,25 @@ def invite_user(
     return inv, token
 
 
-def accept_invite(uow: UnitOfWork, payload: AcceptInviteRequest) -> User:
+def validate_invite(uow: UnitOfWork, token: str) -> dict:
+    db = uow.session
+    token_hash = _hash_token(token)
+    inv = db.scalar(select(Invitation).where(Invitation.token_hash == token_hash))
+    if not inv:
+        raise NotFoundError("invitation not found")
+    org = db.get(Organization, inv.organization_id)
+    role = db.get(Role, inv.role_id)
+    return {
+        "email": inv.email,
+        "role_name": role.name if role else "",
+        "org_name": org.name if org else "",
+        "org_slug": org.slug if org else "",
+        "expires_at": inv.expires_at,
+        "accepted_at": inv.accepted_at,
+    }
+
+
+def accept_invite(uow: UnitOfWork, payload: AcceptInviteRequest) -> tuple[User, dict]:
     db = uow.session
     token_hash = _hash_token(payload.token)
     inv = db.scalar(select(Invitation).where(Invitation.token_hash == token_hash))
@@ -252,10 +265,10 @@ def accept_invite(uow: UnitOfWork, payload: AcceptInviteRequest) -> User:
          organization_id=inv.organization_id, actor_id=user.id, payload={"email": user.email})
     uow.commit()
     db.refresh(user)
-    return user
+    tokens = issue_tokens(uow, user)
+    return user, tokens
 
 
-# ---------- Users ----------
 def list_users(uow: UnitOfWork, org_id: uuid.UUID) -> list[User]:
     return list(
         uow.session.scalars(
@@ -298,7 +311,6 @@ def deactivate_user(
     return u
 
 
-# ---------- Roles ----------
 def list_roles(uow: UnitOfWork, org_id: uuid.UUID) -> list[Role]:
     return list(
         uow.session.scalars(
@@ -363,11 +375,9 @@ def revoke_role(
     return user
 
 
-# ---------- Password reset ----------
 def forgot_password(
     uow: UnitOfWork, email: str, organization_slug: str
 ) -> tuple[User | None, str | None]:
-    """Returns (user, token) if user exists; else (None, None) to avoid user enumeration."""
     db = uow.session
     org = db.scalar(select(Organization).where(Organization.slug == organization_slug))
     if not org:
@@ -406,7 +416,6 @@ def reset_password(uow: UnitOfWork, payload: ResetPasswordRequest) -> User:
     user.hashed_password = hash_password(payload.new_password)
     row.used_at = _now()
 
-    # revoke all sessions on password change
     db.query(SessionModel).filter(SessionModel.user_id == user.id).update(
         {"revoked_at": _now()}
     )

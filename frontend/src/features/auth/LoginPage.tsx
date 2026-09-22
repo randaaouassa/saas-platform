@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { fetchMe, login } from "../../shared/api/auth";
-import { homePathForRole, useAuthStore } from "../../shared/stores/auth";
+import { homePathForRoles, useAuthStore } from "../../shared/stores/auth";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
@@ -27,10 +27,10 @@ export default function LoginPage() {
                 id: me.id,
                 email: me.email,
                 full_name: me.full_name,
-                role: me.role,
+                roles: me.roles,
                 organization_id: me.organization_id,
             });
-            navigate(homePathForRole(me.role));
+            navigate(homePathForRoles(me.roles));
         } catch (err: any) {
             setError(err?.response?.data?.title ?? "Login failed");
         } finally {
@@ -71,6 +71,7 @@ export default function LoginPage() {
                         className="input"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
+                        autoComplete="email"
                         required
                     />
                 </div>
@@ -81,6 +82,7 @@ export default function LoginPage() {
                         className="input"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
                         required
                     />
                 </div>
